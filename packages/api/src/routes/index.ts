@@ -1,14 +1,13 @@
 import { Router } from 'express'
+import { authRouter } from './auth.routes'
 
 export const router = Router()
 
-// ─── Health ───────────────────────────────────────────────────────────────────
-router.get('/ping', (_req, res) => {
-  res.json({ message: 'pong' })
-})
+router.get('/ping', (_req, res) => res.json({ message: 'pong' }))
 
-// ─── À venir (Phase 1) ────────────────────────────────────────────────────────
-// router.use('/auth',      authRouter)
+router.use('/auth', authRouter)
+
+// À venir Phase 1+
 // router.use('/students',  studentsRouter)
 // router.use('/teachers',  teachersRouter)
 // router.use('/courses',   coursesRouter)

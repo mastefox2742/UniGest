@@ -3,7 +3,13 @@ import { LoginForm } from './login-form'
 
 export const metadata: Metadata = { title: 'Connexion' }
 
-export default function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ redirectTo?: string }>
+}) {
+  const { redirectTo } = await searchParams
+
   return (
     <main className="flex min-h-screen items-center justify-center bg-muted/40 p-4">
       <div className="w-full max-w-sm space-y-6">
@@ -13,7 +19,7 @@ export default function LoginPage() {
             Connectez-vous à votre espace universitaire
           </p>
         </div>
-        <LoginForm />
+        <LoginForm redirectTo={redirectTo} />
       </div>
     </main>
   )
