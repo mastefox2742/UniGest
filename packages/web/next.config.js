@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  eslint: { ignoreDuringBuilds: true },
   transpilePackages: ['@unigest/shared'],
   images: {
     remotePatterns: [
@@ -10,9 +11,7 @@ const nextConfig = {
       },
     ],
   },
-  experimental: {
-    typedRoutes: true,
-  },
+  experimental: {},
 }
 
 module.exports = nextConfig

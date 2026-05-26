@@ -28,7 +28,7 @@ export function Step3Program({ defaultValues, onNext, onBack }: Props) {
   const [preview,     setPreview]     = useState<DegreeProgram | null>(null)
 
   const { handleSubmit, setValue, formState: { errors } } =
-    useForm<Step3Data>({ resolver: zodResolver(schema), defaultValues })
+    useForm<Step3Data>({ resolver: zodResolver(schema), ...(defaultValues !== undefined ? { defaultValues } : {}) })
 
   useEffect(() => {
     supabase

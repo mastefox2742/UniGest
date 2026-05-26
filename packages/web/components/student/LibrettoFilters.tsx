@@ -15,9 +15,10 @@ export function LibrettoFiltersBar({ filters, onChange }: Props) {
         <label className="text-sm font-medium text-muted-foreground">Semestre</label>
         <select
           value={filters.semester ?? ''}
-          onChange={(e) =>
-            onChange({ ...filters, semester: e.target.value ? (Number(e.target.value) as 1 | 2) : undefined })
-          }
+          onChange={(e) => {
+            const { semester: _s, ...rest } = filters
+            onChange({ ...rest, ...(e.target.value ? { semester: Number(e.target.value) as 1 | 2 } : {}) })
+          }}
           className="rounded-md border bg-background px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-ring"
         >
           <option value="">Tous</option>
@@ -31,9 +32,10 @@ export function LibrettoFiltersBar({ filters, onChange }: Props) {
         <label className="text-sm font-medium text-muted-foreground">Année</label>
         <select
           value={filters.courseYear ?? ''}
-          onChange={(e) =>
-            onChange({ ...filters, courseYear: e.target.value ? Number(e.target.value) : undefined })
-          }
+          onChange={(e) => {
+            const { courseYear: _cy, ...rest } = filters
+            onChange({ ...rest, ...(e.target.value ? { courseYear: Number(e.target.value) } : {}) })
+          }}
           className="rounded-md border bg-background px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-ring"
         >
           <option value="">Toutes</option>

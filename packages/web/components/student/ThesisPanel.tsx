@@ -5,12 +5,12 @@ import { toast } from 'sonner'
 import { useStudentThesis, useSubmitThesis } from '@/lib/hooks/useThesis'
 
 const STATUS_CFG: Record<string, { label: string; cls: string; icon: string }> = {
-  draft:        { label: 'Brouillon',       cls: 'bg-muted text-muted-foreground',    icon: '📝' },
-  submitted:    { label: 'Soumise',         cls: 'bg-blue-100 text-blue-700',          icon: '📤' },
-  under_review: { label: 'En révision',     cls: 'bg-yellow-100 text-yellow-700',      icon: '🔍' },
-  approved:     { label: 'Approuvée',       cls: 'bg-green-100 text-green-700',        icon: '✅' },
-  rejected:     { label: 'Refusée',         cls: 'bg-red-100 text-red-700',            icon: '❌' },
-  defended:     { label: 'Soutenue ✨',     cls: 'bg-purple-100 text-purple-700',      icon: '🎓' },
+  proposed:    { label: 'Proposée',         cls: 'bg-muted text-muted-foreground',    icon: '📝' },
+  submitted:   { label: 'Soumise',          cls: 'bg-blue-100 text-blue-700',          icon: '📤' },
+  in_progress: { label: 'En cours',         cls: 'bg-yellow-100 text-yellow-700',      icon: '🔍' },
+  approved:    { label: 'Approuvée',        cls: 'bg-green-100 text-green-700',        icon: '✅' },
+  rejected:    { label: 'Refusée',          cls: 'bg-red-100 text-red-700',            icon: '❌' },
+  defended:    { label: 'Soutenue ✨',      cls: 'bg-purple-100 text-purple-700',      icon: '🎓' },
 }
 
 export function ThesisPanel() {
@@ -39,7 +39,7 @@ export function ThesisPanel() {
     }
   }, [thesis])
 
-  const canEdit = !thesis || ['draft', 'submitted', 'under_review', 'rejected'].includes(thesis.status)
+  const canEdit = !thesis || ['proposed', 'submitted', 'in_progress', 'rejected'].includes(thesis.status)
 
   async function handleSubmit() {
     if (!form.title.trim()) { toast.error('Titre requis'); return }
@@ -85,11 +85,14 @@ export function ThesisPanel() {
               )}
             </div>
             <div className="shrink-0">
-              {STATUS_CFG[thesis.status] && (
-                <span className={`rounded-full px-3 py-1 text-sm font-medium ${STATUS_CFG[thesis.status].cls}`}>
-                  {STATUS_CFG[thesis.status].icon} {STATUS_CFG[thesis.status].label}
-                </span>
-              )}
+              {(() => {
+                const sc = STATUS_CFG[thesis.status]
+                return sc ? (
+                  <span className={`rounded-full px-3 py-1 text-sm font-medium ${sc.cls}`}>
+                    {sc.icon} {sc.label}
+                  </span>
+                ) : null
+              })()}
             </div>
           </div>
 

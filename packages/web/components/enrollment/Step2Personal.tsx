@@ -24,7 +24,7 @@ interface Props {
 
 export function Step2Personal({ defaultValues, onNext, onBack }: Props) {
   const { register, handleSubmit, formState: { errors } } =
-    useForm<Step2Data>({ resolver: zodResolver(schema), defaultValues })
+    useForm<Step2Data>({ resolver: zodResolver(schema), ...(defaultValues !== undefined ? { defaultValues } : {}) })
 
   function Field({ id, label, type = 'text', placeholder }: {
     id: keyof Step2Data; label: string; type?: string; placeholder?: string

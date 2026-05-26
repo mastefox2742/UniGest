@@ -148,7 +148,7 @@ export default function ExamsScreen() {
                   <Text style={[styles.badge, b.status === 'cancelled' ? styles.badgeCancelled : styles.badgeActive]}>
                     {b.status === 'cancelled' ? 'Annulée' : 'Inscrit ✅'}
                   </Text>
-                  {b.status === 'active' && !isPast && (
+                  {b.status === 'booked' && !isPast && (
                     <TouchableOpacity
                       onPress={() => handleCancel(es?.id)}
                       disabled={acting === es?.id}

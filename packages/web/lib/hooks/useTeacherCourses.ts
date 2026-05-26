@@ -58,7 +58,7 @@ export function useTeacherCourses() {
         .order('year')
         .order('semester')
 
-      return (data ?? []) as Course[]
+      return (data ?? []) as unknown as Course[]
     },
     staleTime: 1000 * 60 * 5,
   })

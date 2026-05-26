@@ -154,7 +154,7 @@ export function QuizPlayer({ quiz }: { quiz: any }) {
                     {idx + 1}
                   </span>
                   <div className="flex-1">
-                    <p className="text-sm font-medium">{q.question}</p>
+                    <p className="text-sm font-medium">{q.text}</p>
                     <p className="text-xs text-muted-foreground mt-0.5">
                       {q.type === 'single' ? 'Choisissez une réponse' :
                        q.type === 'multiple' ? 'Plusieurs réponses possibles' :
@@ -190,7 +190,7 @@ export function QuizPlayer({ quiz }: { quiz: any }) {
                           }`}>
                             {selected && <span className="text-white text-[10px]">✓</span>}
                           </span>
-                          {opt.option_text}
+                          {opt.text}
                         </button>
                       )
                     })}

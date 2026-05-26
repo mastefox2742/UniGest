@@ -107,17 +107,20 @@ quizRouter.post('/:quizId/questions',
   requireRole('teacher', 'admin'),
   async (req, res) => {
     try {
-      const { question, type, points, options } = req.body as {
-        question: string
+      // Accept both "text" and legacy "question" field names
+      const body = req.body as {
+        text?: string; question?: string
         type:     'single' | 'multiple' | 'true_false' | 'open'
         points?:  number
         options?: { text: string; isCorrect: boolean }[]
       }
-      if (!question || !type) return res.status(400).json({ error: 'question et type sont requis' })
+      const text = body.text ?? body.question
+      const { type, points, options } = body
+      if (!text || !type) return res.status(400).json({ error: 'text et type sont requis' })
       const input: {
-        question: string; type: 'single' | 'multiple' | 'true_false' | 'open'
+        text: string; type: 'single' | 'multiple' | 'true_false' | 'open'
         points?: number; options?: { text: string; isCorrect: boolean }[]
-      } = { question, type }
+      } = { text, type }
       if (points  !== undefined) input.points  = points
       if (options !== undefined) input.options = options
       const q = await createQuestion(req.params.quizId!, input)

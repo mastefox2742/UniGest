@@ -69,15 +69,15 @@ export default function DashboardScreen() {
         // Stats en parallèle
         const [{ data: grades }, { count: pending }, { count: overdue }] = await Promise.all([
           supabase
-            .from('student_grades')
-            .select('grade')
+            .from('grades')
+            .select('value')
             .eq('student_id', stu.id)
-            .eq('status', 'accepted'),
+            .in('status', ['accepted', 'published']),
           supabase
             .from('exam_bookings')
             .select('id', { count: 'exact', head: true })
             .eq('student_id', stu.id)
-            .eq('status', 'active'),
+            .eq('status', 'booked'),
           supabase
             .from('tuition_fees')
             .select('id', { count: 'exact', head: true })
@@ -85,9 +85,9 @@ export default function DashboardScreen() {
             .eq('status', 'overdue'),
         ])
 
-        const accepted    = (grades ?? []).filter(g => typeof g.grade === 'number')
+        const accepted    = (grades ?? []).filter(g => typeof g.value === 'number')
         const avg         = accepted.length > 0
-          ? accepted.reduce((s, g) => s + g.grade, 0) / accepted.length
+          ? accepted.reduce((s, g) => s + (g.value ?? 0), 0) / accepted.length
           : 0
 
         setStats({

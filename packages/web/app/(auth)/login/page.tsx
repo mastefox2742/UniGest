@@ -19,7 +19,7 @@ export default async function LoginPage({
             Connectez-vous à votre espace universitaire
           </p>
         </div>
-        <LoginForm redirectTo={redirectTo} />
+        <LoginForm {...(redirectTo !== undefined ? { redirectTo } : {})} />
       </div>
     </main>
   )

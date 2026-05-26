@@ -19,7 +19,12 @@ function SubmissionsModal({
     const score = Number(scores[subId])
     if (isNaN(score)) { toast.error('Score invalide'); return }
     try {
-      await gradeM.mutateAsync({ id: subId, score, feedback: feedbacks[subId] })
+      const fb = feedbacks[subId]
+      await gradeM.mutateAsync({
+        id: subId,
+        score,
+        ...(fb !== undefined ? { feedback: fb } : {}),
+      })
       toast.success('Note enregistrée')
     } catch (err) {
       toast.error((err as Error).message)

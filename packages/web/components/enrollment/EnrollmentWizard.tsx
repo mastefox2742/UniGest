@@ -34,7 +34,7 @@ export function EnrollmentWizard() {
       options: { data: { role: 'student' } },
     })
     if (error) { alert(error.message); return }
-    setData(d => ({ ...d, step1: s1, userId: authData.user?.id }))
+    setData(d => ({ ...d, step1: s1, ...(authData.user?.id !== undefined ? { userId: authData.user.id } : {}) }))
     setStep(2)
   }
 
@@ -81,11 +81,16 @@ export function EnrollmentWizard() {
     <div className="space-y-2">
       <StepIndicator current={step} />
 
-      {step === 1 && <Step1Account defaultValues={data.step1} onNext={onStep1} />}
+      {step === 1 && (
+        <Step1Account
+          {...(data.step1 !== undefined ? { defaultValues: data.step1 } : {})}
+          onNext={onStep1}
+        />
+      )}
 
       {step === 2 && (
         <Step2Personal
-          defaultValues={data.step2}
+          {...(data.step2 !== undefined ? { defaultValues: data.step2 } : {})}
           onNext={s2 => { setData(d => ({ ...d, step2: s2 })); setStep(3) }}
           onBack={() => setStep(1)}
         />
@@ -93,7 +98,7 @@ export function EnrollmentWizard() {
 
       {step === 3 && (
         <Step3Program
-          defaultValues={data.step3}
+          {...(data.step3 !== undefined ? { defaultValues: data.step3 } : {})}
           onNext={s3 => { setData(d => ({ ...d, step3: s3 })); setStep(4) }}
           onBack={() => setStep(2)}
         />

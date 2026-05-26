@@ -22,7 +22,7 @@ export async function createQuiz(ecId: string, input: {
       description:         input.description ?? null,
       time_limit_min:      input.timeLimitMin ?? null,
       pass_score:          input.passScore ?? 50,
-      max_attempts:        input.maxAttempts ?? null,
+      max_attempts:        input.maxAttempts ?? 1,
       is_published:        false,
     })
     .select()
@@ -71,8 +71,8 @@ export async function getQuizWithQuestions(quizId: string) {
     .select(`
       id, title, description, time_limit_min, pass_score, max_attempts, is_published,
       quiz_questions(
-        id, question, type, points, position,
-        quiz_options(id, option_text, is_correct, position)
+        id, text, type, points, position,
+        quiz_options(id, text, is_correct, position)
       )
     `)
     .eq('id', quizId)
@@ -83,7 +83,7 @@ export async function getQuizWithQuestions(quizId: string) {
 }
 
 export async function createQuestion(quizId: string, input: {
-  question: string
+  text:     string
   type:     'single' | 'multiple' | 'true_false' | 'open'
   points?:  number
   options?: { text: string; isCorrect: boolean }[]
@@ -97,7 +97,7 @@ export async function createQuestion(quizId: string, input: {
     .from('quiz_questions')
     .insert({
       quiz_id:  quizId,
-      question: input.question,
+      text:     input.text,
       type:     input.type,
       points:   input.points ?? 1,
       position: (count ?? 0),
@@ -110,7 +110,7 @@ export async function createQuestion(quizId: string, input: {
   if (input.options && input.options.length > 0) {
     const opts = input.options.map((o, i) => ({
       question_id: q.id,
-      option_text: o.text,
+      text:        o.text,
       is_correct:  o.isCorrect,
       position:    i,
     }))
@@ -135,7 +135,6 @@ export async function startQuizAttempt(quizId: string, studentUserId: string) {
 
   if (!student) throw new Error('Étudiant introuvable')
 
-  // Vérifier le nombre de tentatives
   const { data: quiz } = await supabase
     .from('elearning_quizzes')
     .select('max_attempts, is_published')
@@ -181,7 +180,7 @@ export async function startQuizAttempt(quizId: string, studentUserId: string) {
 }
 
 export async function submitQuizAttempt(
-  attemptId:  string,
+  attemptId:     string,
   studentUserId: string,
   answers: { questionId: string; selectedOptionIds?: string[]; openAnswer?: string }[],
 ) {
@@ -202,7 +201,6 @@ export async function submitQuizAttempt(
   if (!attempt || attempt.student_id !== student.id) throw new Error('Tentative introuvable')
   if (attempt.status !== 'in_progress') throw new Error('Tentative déjà terminée')
 
-  // Récupérer toutes les questions avec les bonnes réponses
   const { data: questions } = await supabase
     .from('quiz_questions')
     .select('id, type, points, quiz_options(id, is_correct)')
@@ -211,7 +209,7 @@ export async function submitQuizAttempt(
   let totalScore  = 0
   let totalPoints = 0
 
-  const answerRows: Record<string, unknown>[] = []
+  const responseRows: Record<string, unknown>[] = []
 
   for (const q of questions ?? []) {
     const answer = answers.find(a => a.questionId === q.id)
@@ -219,10 +217,10 @@ export async function submitQuizAttempt(
 
     if (!answer) continue
 
-    // Auto-scoring pour les questions à choix
+    const opts       = (q.quiz_options as { id: string; is_correct: boolean }[]) ?? []
     let earnedPoints = 0
+
     if (q.type !== 'open') {
-      const opts = (q.quiz_options as { id: string; is_correct: boolean }[]) ?? []
       const correctIds  = new Set(opts.filter(o => o.is_correct).map(o => o.id))
       const selectedIds = new Set(answer.selectedOptionIds ?? [])
 
@@ -231,28 +229,52 @@ export async function submitQuizAttempt(
           earnedPoints = q.points
         }
       } else if (q.type === 'multiple') {
-        // Toutes les bonnes réponses sélectionnées ET aucune mauvaise
-        const allCorrect  = [...correctIds].every(id => selectedIds.has(id))
-        const noWrong     = [...selectedIds].every(id => correctIds.has(id))
+        const allCorrect = [...correctIds].every(id => selectedIds.has(id))
+        const noWrong    = [...selectedIds].every(id => correctIds.has(id))
         if (allCorrect && noWrong) earnedPoints = q.points
       }
       totalScore += earnedPoints
+
+      // One row per selected option
+      const selectedArr = answer.selectedOptionIds ?? []
+      selectedArr.forEach((optId, idx) => {
+        const opt = opts.find(o => o.id === optId)
+        responseRows.push({
+          attempt_id:    attemptId,
+          question_id:   q.id,
+          option_id:     optId,
+          is_correct:    opt?.is_correct ?? false,
+          points_earned: idx === 0 ? earnedPoints : 0,
+        })
+      })
+
+      // If nothing selected, record a null-option row
+      if (selectedArr.length === 0) {
+        responseRows.push({
+          attempt_id:    attemptId,
+          question_id:   q.id,
+          option_id:     null,
+          is_correct:    false,
+          points_earned: 0,
+        })
+      }
+    } else {
+      // Open question — record the text answer, no auto-scoring
+      responseRows.push({
+        attempt_id:    attemptId,
+        question_id:   q.id,
+        option_id:     null,
+        open_answer:   answer.openAnswer ?? null,
+        is_correct:    null,
+        points_earned: 0,
+      })
     }
-
-    answerRows.push({
-      attempt_id:          attemptId,
-      question_id:         q.id,
-      selected_option_ids: answer.selectedOptionIds ?? [],
-      open_answer:         answer.openAnswer ?? null,
-      points_earned:       earnedPoints,
-    })
   }
 
-  if (answerRows.length > 0) {
-    await supabase.from('quiz_answers').insert(answerRows)
+  if (responseRows.length > 0) {
+    await supabase.from('quiz_responses').insert(responseRows)
   }
 
-  // Récupérer le pass_score du quiz
   const { data: quiz } = await supabase
     .from('elearning_quizzes')
     .select('pass_score')
@@ -270,6 +292,7 @@ export async function submitQuizAttempt(
       score_pct:    scorePct,
       passed,
       submitted_at: new Date().toISOString(),
+      finished_at:  new Date().toISOString(),
     })
     .eq('id', attemptId)
     .select()

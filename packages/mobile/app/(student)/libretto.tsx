@@ -6,11 +6,11 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 
 type Grade = {
-  id:          string
-  grade:       number | null
-  honors:      boolean
-  status:      string
-  recorded_at: string | null
+  id:           string
+  value:        number | null
+  is_honors:    boolean
+  status:       string
+  published_at: string | null
   exam_sessions: {
     date: string
     courses: { name: string; code: string; cfu: number }
@@ -43,9 +43,9 @@ export default function LibrettoScreen() {
       if (!student) return
 
       const { data } = await supabase
-        .from('student_grades')
+        .from('grades')
         .select(`
-          id, grade, honors, status, recorded_at,
+          id, value, is_honors, status, published_at,
           exam_sessions!exam_session_id(
             date,
             courses!course_id(name, code, cfu)
@@ -53,7 +53,7 @@ export default function LibrettoScreen() {
         `)
         .eq('student_id', student.id)
         .in('status', ['accepted', 'published'])
-        .order('recorded_at', { ascending: false })
+        .order('published_at', { ascending: false })
 
       setGrades((data ?? []) as any)
     } catch (err) {
@@ -66,16 +66,16 @@ export default function LibrettoScreen() {
 
   useEffect(() => { loadGrades() }, [])
 
-  const accepted    = grades.filter(g => g.status === 'accepted' && g.grade !== null)
+  const accepted    = grades.filter(g => ['accepted', 'published'].includes(g.status) && g.value !== null)
   const totalCfu    = accepted.reduce((s, g) => s + ((g.exam_sessions as any)?.courses?.cfu ?? 0), 0)
   const avg         = accepted.length > 0
-    ? accepted.reduce((s, g) => s + (g.grade ?? 0), 0) / accepted.length
+    ? accepted.reduce((s, g) => s + (g.value ?? 0), 0) / accepted.length
     : 0
 
   const renderItem = ({ item }: { item: Grade }) => {
     const session = item.exam_sessions as any
     const course  = session?.courses
-    const color   = item.grade !== null ? gradeColor(item.grade) : '#9ca3af'
+    const color   = item.value !== null ? gradeColor(item.value) : '#9ca3af'
 
     return (
       <View style={styles.card}>
@@ -83,18 +83,18 @@ export default function LibrettoScreen() {
           <View style={styles.cardInfo}>
             <Text style={styles.courseName} numberOfLines={2}>{course?.name ?? '—'}</Text>
             <Text style={styles.courseCode}>{course?.code} • {course?.cfu} CFU</Text>
-            {item.recorded_at && (
+            {item.published_at && (
               <Text style={styles.date}>
-                {new Date(item.recorded_at).toLocaleDateString('fr-FR')}
+                {new Date(item.published_at).toLocaleDateString('fr-FR')}
               </Text>
             )}
           </View>
           <View style={[styles.gradeBox, { borderColor: color }]}>
             <Text style={[styles.grade, { color }]}>
-              {item.grade ?? '—'}
-              {item.honors ? 'L' : ''}
+              {item.value ?? '—'}
+              {item.is_honors ? 'L' : ''}
             </Text>
-            {item.honors && <Text style={styles.honorsLabel}>Honours</Text>}
+            {item.is_honors && <Text style={styles.honorsLabel}>Honours</Text>}
           </View>
         </View>
       </View>

@@ -90,7 +90,7 @@ function QuizEditor({ quizId, onBack }: { quizId: string; onBack: () => void }) 
                 {idx + 1}
               </span>
               <div className="flex-1">
-                <p className="text-sm font-medium">{q.question}</p>
+                <p className="text-sm font-medium">{q.text}</p>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   {QUESTION_TYPES.find(t => t.value === q.type)?.label} • {q.points} pt(s)
                 </p>
@@ -102,7 +102,7 @@ function QuizEditor({ quizId, onBack }: { quizId: string; onBack: () => void }) 
                         <div key={opt.id} className={`flex items-center gap-2 text-xs px-2 py-1 rounded ${
                           opt.is_correct ? 'bg-green-50 text-green-700' : 'text-muted-foreground'
                         }`}>
-                          {opt.is_correct ? '✅' : '○'} {opt.option_text}
+                          {opt.is_correct ? '✅' : '○'} {opt.text}
                         </div>
                       ))}
                   </div>

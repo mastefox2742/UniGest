@@ -22,10 +22,10 @@ interface Props {
 
 export function Step1Account({ defaultValues, onNext }: Props) {
   const { register, handleSubmit, formState: { errors } } =
-    useForm<Step1Data>({ resolver: zodResolver(schema), defaultValues })
+    useForm<Step1Data>({ resolver: zodResolver(schema), ...(defaultValues !== undefined ? { defaultValues } : {}) })
 
   const Field = ({ id, label, type = 'text', placeholder, error }: {
-    id: keyof Step1Data; label: string; type?: string; placeholder?: string; error?: string
+    id: keyof Step1Data; label: string; type?: string; placeholder?: string; error?: string | undefined
   }) => (
     <div className="space-y-1">
       <label htmlFor={id} className="text-sm font-medium">{label}</label>

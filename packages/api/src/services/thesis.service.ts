@@ -5,7 +5,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 )
 
-export type ThesisStatus = 'draft' | 'submitted' | 'under_review' | 'approved' | 'rejected' | 'defended'
+export type ThesisStatus = 'proposed' | 'submitted' | 'in_progress' | 'approved' | 'rejected' | 'defended'
 
 // ─── Étudiant ─────────────────────────────────────────────────────────────────
 
