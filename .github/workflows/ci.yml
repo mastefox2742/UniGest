@@ -162,7 +162,7 @@ jobs:
         run: npm test
 
       - name: Upload coverage
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v6
         if: always()
         with:
           directory: packages/api/coverage
