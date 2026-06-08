@@ -1,7 +1,0 @@
-{
-  "framework": "nextjs",
-  "installCommand": "npm install",
-  "buildCommand": "cd packages/web && next build",
-  "outputDirectory": "packages/web/.next",
-  "regions": ["cdg1"]
-}

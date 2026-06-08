@@ -26,8 +26,8 @@ CREATE TABLE room_bookings (
   CONSTRAINT no_time_overlap EXCLUDE USING gist (
     classroom_id WITH =,
     tsrange(
-      (day::TEXT || ' ' || start_time::TEXT)::TIMESTAMPTZ,
-      (day::TEXT || ' ' || end_time::TEXT)::TIMESTAMPTZ
+      (day::TEXT || ' ' || start_time::TEXT)::TIMESTAMP,
+      (day::TEXT || ' ' || end_time::TEXT)::TIMESTAMP
     ) WITH &&
   ) WHERE (status = 'confirmed')
 );

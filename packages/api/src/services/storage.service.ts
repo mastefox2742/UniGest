@@ -18,6 +18,24 @@ const ALLOWED_MIME_TYPES = new Set([
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024  // 10 MB
 
+// ─── Magic bytes (signatures de fichiers réels) ───────────────────────────────
+// Vérifie les vrais bytes du fichier — protège contre le spoofing MIME
+const MAGIC_BYTES: Array<{ mime: string; bytes: number[]; offset?: number }> = [
+  { mime: 'application/pdf', bytes: [0x25, 0x50, 0x44, 0x46] },          // %PDF
+  { mime: 'image/jpeg',      bytes: [0xFF, 0xD8, 0xFF] },                 // JPEG SOI
+  { mime: 'image/png',       bytes: [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A] },  // PNG
+  { mime: 'image/webp',      bytes: [0x52, 0x49, 0x46, 0x46], offset: 0 }, // RIFF (WebP)
+]
+
+function detectMimeFromBytes(buffer: Buffer): string | null {
+  for (const sig of MAGIC_BYTES) {
+    const offset = sig.offset ?? 0
+    const slice  = [...buffer.slice(offset, offset + sig.bytes.length)]
+    if (sig.bytes.every((b, i) => b === slice[i])) return sig.mime
+  }
+  return null
+}
+
 // ─── Upload sécurisé ──────────────────────────────────────────────────────────
 
 export async function uploadDocument(
@@ -28,12 +46,27 @@ export async function uploadDocument(
   mimeType:  string,
 ): Promise<{ signedUrl: string; path: string } | null> {
 
-  // 1. Validation du type MIME
+  // 1. Validation du type MIME déclaré par le client
   if (!ALLOWED_MIME_TYPES.has(mimeType)) {
     throw new Error(`Type de fichier non autorisé : ${mimeType}. Types acceptés : PDF, JPEG, PNG, WebP`)
   }
 
-  // 2. Validation de la taille
+  // 2. Validation des magic bytes réels (protège contre le spoofing MIME)
+  const detectedMime = detectMimeFromBytes(buffer)
+  if (!detectedMime) {
+    throw new Error('Fichier invalide : signature de fichier non reconnue.')
+  }
+  // Pour WebP, on vérifie aussi les bytes 8-11 (WEBP)
+  if (mimeType === 'image/webp') {
+    const webpMarker = buffer.slice(8, 12).toString('ascii')
+    if (webpMarker !== 'WEBP') {
+      throw new Error('Fichier invalide : le contenu ne correspond pas à une image WebP.')
+    }
+  } else if (detectedMime !== mimeType) {
+    throw new Error(`Type de fichier invalide : le contenu réel (${detectedMime}) ne correspond pas au type déclaré (${mimeType}).`)
+  }
+
+  // 3. Validation de la taille
   if (buffer.length > MAX_FILE_SIZE) {
     throw new Error(`Fichier trop volumineux : ${Math.round(buffer.length / 1024 / 1024)}MB. Maximum : 10MB`)
   }

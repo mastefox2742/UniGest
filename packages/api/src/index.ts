@@ -15,6 +15,10 @@ const app  = express()
 const PORT = process.env.API_PORT ?? 3001
 const isProd = process.env.NODE_ENV === 'production'
 
+// ─── Trust proxy (obligatoire pour rate-limiting correct derrière Nginx/Cloudflare) ──
+// Sans ce flag, express-rate-limit lit l'IP du proxy au lieu de l'IP cliente réelle
+app.set('trust proxy', 1)
+
 // ─── Sécurité & Headers ───────────────────────────────────────────────────────
 app.use(helmet({
   contentSecurityPolicy: {
@@ -47,8 +51,12 @@ const ALLOWED_ORIGINS = [
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Autoriser les requêtes sans origin (mobile natif, curl, tests)
-    if (!origin) return callback(null, true)
+    // En production : rejeter les requêtes sans origin (curl, scripts anonymes)
+    // En dev : les autoriser pour faciliter les tests locaux
+    if (!origin) {
+      if (isProd) return callback(new Error('CORS: origine manquante refusée en production'))
+      return callback(null, true)
+    }
     if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true)
     callback(new Error(`CORS: origine non autorisée — ${origin}`))
   },

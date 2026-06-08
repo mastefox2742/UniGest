@@ -1,6 +1,32 @@
 import type { Request, Response, NextFunction } from 'express'
 import { z, type ZodSchema } from 'zod'
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/**
+ * Middleware de validation UUID sur les paramètres de route.
+ * Protège contre les injections via des IDs malformés.
+ *
+ * Usage :
+ *   router.get('/:id', validateParams('id'), handler)
+ *   router.get('/:courseId/:examId', validateParams('courseId', 'examId'), handler)
+ */
+export function validateParams(...paramNames: string[]) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    for (const param of paramNames) {
+      const value = req.params[param]
+      if (!value || !UUID_REGEX.test(value)) {
+        return res.status(400).json({
+          error:      'Bad Request',
+          message:    `Paramètre invalide : "${param}" doit être un UUID valide.`,
+          statusCode: 400,
+        })
+      }
+    }
+    return next()
+  }
+}
+
 /**
  * Middleware de validation Zod.
  * Valide req.body contre le schéma fourni.

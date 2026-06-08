@@ -194,9 +194,10 @@ CREATE TABLE schedule_slots (
   course_id        UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
   classroom_id     UUID REFERENCES classrooms(id),
   academic_year_id UUID NOT NULL REFERENCES academic_years(id),
-  day_of_week      INT NOT NULL CHECK (day_of_week BETWEEN 1 AND 7),
+  day_of_week      INT NOT NULL CHECK (day_of_week BETWEEN 0 AND 6),  -- 0=Lun, 6=Dim (JS convention)
   start_time       TIME NOT NULL,
   end_time         TIME NOT NULL,
+  room             TEXT,                       -- libellé libre ex: "Amphi A, Bât. 2"
   created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -384,8 +385,8 @@ CREATE TABLE thesis_milestones (
   title       TEXT NOT NULL,
   description TEXT,
   due_date    DATE,
-  done        BOOLEAN NOT NULL DEFAULT FALSE,
-  done_at     TIMESTAMPTZ,
+  completed   BOOLEAN NOT NULL DEFAULT FALSE,
+  completed_at TIMESTAMPTZ,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -395,7 +396,7 @@ CREATE TABLE notifications (
   id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id     UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   title       TEXT NOT NULL,
-  body        TEXT NOT NULL,
+  message     TEXT NOT NULL,
   type        TEXT NOT NULL DEFAULT 'info',  -- 'info','warning','success','error'
   is_read     BOOLEAN NOT NULL DEFAULT FALSE,
   read_at     TIMESTAMPTZ,

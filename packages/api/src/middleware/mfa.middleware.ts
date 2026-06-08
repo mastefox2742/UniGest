@@ -21,10 +21,11 @@ export async function requireMFA(
   res: Response,
   next: NextFunction,
 ) {
-  // Mode progressif : désactivable via variable d'env pendant la migration
-  if (process.env.REQUIRE_MFA !== 'true') {
-    // Logge pour tracking — combien de requêtes admin sans MFA
-    console.warn(`[MFA] Contournement autorisé (REQUIRE_MFA=false) — user: ${req.user?.id ?? 'unknown'} — ${req.method} ${req.path}`)
+  // MFA obligatoire en production. En dev/staging, désactivable via REQUIRE_MFA=false.
+  // ⚠️  En production, REQUIRE_MFA doit TOUJOURS être 'true' — ne jamais le désactiver.
+  const mfaEnforced = process.env.NODE_ENV === 'production' || process.env.REQUIRE_MFA === 'true'
+  if (!mfaEnforced) {
+    console.warn(`[MFA] Contournement autorisé (env: ${process.env.NODE_ENV}, REQUIRE_MFA=${process.env.REQUIRE_MFA}) — user: ${req.user?.id ?? 'unknown'} — ${req.method} ${req.path}`)
     return next()
   }
 

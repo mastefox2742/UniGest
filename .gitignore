@@ -17,6 +17,10 @@ out/
 .env.production
 .env.staging
 .env.prod
+# Sous-packages (protection explicite)
+packages/**/.env
+packages/**/.env.local
+packages/**/.env.production
 *.pem
 *.key
 *.cert
@@ -49,6 +53,10 @@ coverage/
 # Supabase
 supabase/.branches
 supabase/.temp
+
+# Fichiers locaux / présentations (non pertinents pour le repo)
+alpha-intro-video/
+storyboard-alpha-intro.html
 
 # Sécurité — ne jamais commiter
 *.secret
