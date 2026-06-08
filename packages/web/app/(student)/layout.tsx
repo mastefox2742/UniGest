@@ -5,9 +5,9 @@ import { StudentNav } from '@/components/student/StudentNav'
 export default async function StudentLayout({ children }: { children: React.ReactNode }) {
   if (process.env.NEXT_PUBLIC_DEMO_MODE === 'true') {
     return (
-      <div className="flex h-screen overflow-hidden">
+      <div className="flex h-screen flex-col overflow-hidden md:flex-row">
         <StudentNav fullName="Alex Dupont" matricola="M-2024-001" />
-        <main className="flex-1 overflow-y-auto bg-background p-8">{children}</main>
+        <main className="flex-1 overflow-y-auto bg-background p-4 md:p-8">{children}</main>
       </div>
     )
   }
@@ -34,9 +34,9 @@ export default async function StudentLayout({ children }: { children: React.Reac
   const avatarUrl = (profile.avatar_url as string | null) ?? undefined
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-screen flex-col overflow-hidden md:flex-row">
       <StudentNav fullName={fullName} matricola={student?.matricola ?? undefined} avatarUrl={avatarUrl} />
-      <main className="flex-1 overflow-y-auto bg-background p-8">
+      <main className="flex-1 overflow-y-auto bg-background p-4 md:p-8">
         {children}
       </main>
     </div>

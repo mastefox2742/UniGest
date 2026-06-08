@@ -6,7 +6,7 @@ import { AdminNav } from '@/components/admin/AdminNav'
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   if (process.env.NEXT_PUBLIC_DEMO_MODE === 'true') {
     return (
-      <div className="flex h-screen overflow-hidden">
+      <div className="flex h-screen flex-col overflow-hidden md:flex-row">
         <AdminNav fullName="Admin Demo" role="admin" />
         <main className="flex-1 overflow-y-auto bg-background">{children}</main>
       </div>
@@ -39,7 +39,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const fullName = `${profile.first_name} ${profile.last_name}`.trim()
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-screen flex-col overflow-hidden md:flex-row">
       <AdminNav fullName={fullName} role={profile.role as string} />
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* ─── Bannière MFA ─────────────────────────────────────────── */}

@@ -5,7 +5,7 @@ import { TeacherNav } from '@/components/teacher/TeacherNav'
 export default async function TeacherLayout({ children }: { children: React.ReactNode }) {
   if (process.env.NEXT_PUBLIC_DEMO_MODE === 'true') {
     return (
-      <div className="flex h-screen overflow-hidden">
+      <div className="flex h-screen flex-col overflow-hidden md:flex-row">
         <TeacherNav fullName="Prof. Demo" title="Dr." department="Informatique" />
         <main className="flex-1 overflow-y-auto bg-background">{children}</main>
       </div>
@@ -37,7 +37,7 @@ export default async function TeacherLayout({ children }: { children: React.Reac
   const department = (teacher as any)?.departments?.name ?? undefined
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-screen flex-col overflow-hidden md:flex-row">
       <TeacherNav fullName={fullName} title={title} department={department} />
       <main className="flex-1 overflow-y-auto bg-background">
         {children}
