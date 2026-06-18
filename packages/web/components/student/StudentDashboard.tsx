@@ -7,16 +7,16 @@ import Link from 'next/link'
 const STUDENT = {
   fullName:   'Miche Fresneil Zlat Mboni Obambi',
   realName:   'MICHE FRESNEIL',
-  matricola:  'M-2024-001',
-  degree:     'Scienze e tecnologie informatiche',
+  matricula:  'M-2024-001',
+  degree:     'Sciences de l\'informatique',
   degreeCode: 'L-31',
   year:       1,
-  email:      'miche.fresneil@studenti.unigest.it',
-  phone:      '+39 333 123 4567',
-  address:    "Via dell'Università 1, 56126 Pisa PI",
+  email:      'miche.fresneil@etudiant.unigest.fr',
+  phone:      '+33 6 12 34 56 78',
+  address:    '12 Rue de l\'Université, 75005 Paris',
 }
 
-const LIBRETTO = {
+const LIVRET = {
   cfuEarned:    39,
   cfuTotal:     180,
   weightedMean: 28.08,
@@ -28,22 +28,22 @@ const LIBRETTO = {
 }
 
 const TODAY_SLOTS = [
-  { id: 'c1', startTime: '08:30', endTime: '10:30', course: 'Analisi Matematica II',  teacher: 'Prof. Rossi Marco',  room: 'Aula B201', mode: 'presential' as const },
-  { id: 'c2', startTime: '11:00', endTime: '13:00', course: 'Reti Informatiche',       teacher: 'Prof. Conti Paolo',  room: null,         mode: 'online'     as const },
-  { id: 'c3', startTime: '14:30', endTime: '16:30', course: 'Basi di dati (TD)',       teacher: 'Prof. Ferrari Anna', room: 'Aula D102',  mode: 'presential' as const },
+  { id: 'c1', startTime: '08:30', endTime: '10:30', course: 'Analyse Mathématique II',  teacher: 'Prof. Rossi Marco',  room: 'Salle B201', mode: 'presential' as const },
+  { id: 'c2', startTime: '11:00', endTime: '13:00', course: 'Réseaux Informatiques',    teacher: 'Prof. Conti Paolo',  room: null,          mode: 'online'     as const },
+  { id: 'c3', startTime: '14:30', endTime: '16:30', course: 'Bases de données (TD)',    teacher: 'Prof. Ferrari Anna', room: 'Salle D102',  mode: 'presential' as const },
 ]
 
 const DEADLINES = [
-  { id: 'd1', label: 'Chiusura — Analisi Matematica II', detail: 'Iscrizione esame (sessione giugno)', daysLeft: 2,  href: '/student/exams',   type: 'exam_reg' as const },
-  { id: 'd2', label: "2ª rata 2025/2026 — 450 €",        detail: 'Scadenza pagamento tasse',           daysLeft: 5,  href: '/student/fees',    type: 'payment'  as const },
-  { id: 'd3', label: 'Chiusura — Reti Informatiche',      detail: 'Iscrizione esame (sessione giugno)', daysLeft: 6,  href: '/student/exams',   type: 'exam_reg' as const },
-  { id: 'd4', label: 'Consegna progetto — Prog. Avanzata', detail: 'Caricamento progetto finale',       daysLeft: 14, href: '/student/courses', type: 'project'  as const },
+  { id: 'd1', label: 'Clôture — Analyse Mathématique II', detail: 'Inscription examen (session juin)',   daysLeft: 2,  href: '/student/exams',   type: 'exam_reg' as const },
+  { id: 'd2', label: '2ème tranche 2025/2026 — 450 €',    detail: 'Date limite paiement des frais',     daysLeft: 5,  href: '/student/fees',    type: 'payment'  as const },
+  { id: 'd3', label: 'Clôture — Réseaux Informatiques',   detail: 'Inscription examen (session juin)',   daysLeft: 6,  href: '/student/exams',   type: 'exam_reg' as const },
+  { id: 'd4', label: 'Remise projet — Prog. Avancée',      detail: 'Dépôt du projet final sur la plateforme', daysLeft: 14, href: '/student/courses', type: 'project' as const },
 ]
 
 const ANNOUNCEMENTS = [
-  { id: 'a1', from: 'Prof. Conti Paolo', role: 'teacher' as const, msg: "Il corso di Reti di domani si terrà esclusivamente in videoconferenza.", ago: '2 ore fa',     urgent: true  },
-  { id: 'a2', from: 'Segreteria',        role: 'admin'   as const, msg: "Promemoria: la sessione di giugno apre le iscrizioni agli esami il 25 maggio.", ago: '1 giorno fa', urgent: false },
-  { id: 'a3', from: 'Prof. Ferrari',     role: 'teacher' as const, msg: "La correzione del TP3 è disponibile nello spazio corso INF301.",            ago: '3 giorni fa', urgent: false },
+  { id: 'a1', from: 'Prof. Conti Paolo', role: 'teacher' as const, msg: 'Le cours de Réseaux de demain se déroulera exclusivement en visioconférence.', ago: 'il y a 2 h', urgent: true  },
+  { id: 'a2', from: 'Secrétariat',       role: 'admin'   as const, msg: 'Rappel : la session de juin ouvre les inscriptions aux examens le 25 mai.',    ago: 'il y a 1 j', urgent: false },
+  { id: 'a3', from: 'Prof. Ferrari',     role: 'teacher' as const, msg: "La correction du TP3 est disponible dans l'espace cours INF301.",              ago: 'il y a 3 j', urgent: false },
 ]
 
 // ─── Section accordéon style ALICE ────────────────────────────────────────────
@@ -88,7 +88,7 @@ function Section({ title, subtitle, badge, badgeRed, children, defaultOpen = fal
         {/* Visualizza dettagli ▶ */}
         <div className="flex items-center gap-1.5 shrink-0 text-muted-foreground select-none">
           <span className="text-[12px] hidden sm:inline">
-            {open ? 'Nascondi dettagli' : 'Visualizza dettagli'}
+            {open ? 'Masquer les détails' : 'Voir les détails'}
           </span>
           <span className={`text-[9px] font-black transition-transform duration-150 ${open ? 'rotate-90' : ''}`}>▶</span>
         </div>
@@ -103,16 +103,16 @@ function Section({ title, subtitle, badge, badgeRed, children, defaultOpen = fal
   )
 }
 
-// ─── Contenu : Dati personali ─────────────────────────────────────────────────
+// ─── Contenu : Données personnelles ──────────────────────────────────────────
 function ProfilContent() {
   return (
     <div className="space-y-2.5">
       {[
-        { label: 'Nome completo', value: STUDENT.fullName  },
-        { label: 'Matricola',     value: STUDENT.matricola },
-        { label: 'Email',         value: STUDENT.email     },
-        { label: 'Telefono',      value: STUDENT.phone     },
-        { label: 'Indirizzo',     value: STUDENT.address   },
+        { label: 'Nom complet', value: STUDENT.fullName  },
+        { label: 'Matricule',   value: STUDENT.matricula },
+        { label: 'Email',       value: STUDENT.email     },
+        { label: 'Téléphone',   value: STUDENT.phone     },
+        { label: 'Adresse',     value: STUDENT.address   },
       ].map(r => (
         <div key={r.label} className="flex gap-3 text-sm">
           <span className="w-32 shrink-0 text-muted-foreground">{r.label}</span>
@@ -121,31 +121,31 @@ function ProfilContent() {
       ))}
       <div className="pt-2">
         <Link href="/student/settings" className="text-[12px] text-primary hover:underline underline-offset-2">
-          Modifica le mie informazioni →
+          Modifier mes informations →
         </Link>
       </div>
     </div>
   )
 }
 
-// ─── Contenu : Status studente ────────────────────────────────────────────────
+// ─── Contenu : Statut étudiant ────────────────────────────────────────────────
 function StatusContent() {
-  const pct = Math.round((LIBRETTO.cfuEarned / LIBRETTO.cfuTotal) * 100)
+  const pct = Math.round((LIVRET.cfuEarned / LIVRET.cfuTotal) * 100)
   return (
     <div className="space-y-4">
       <div className="space-y-2.5">
         {[
-          { label: 'Anno Accademico',       value: <strong>{LIBRETTO.yearAcad}</strong> },
-          { label: 'Anno di Regolamento',   value: <strong>{LIBRETTO.anneeReg}</strong> },
-          { label: 'Stato Carriera',        value: (
+          { label: 'Année académique',      value: <strong>{LIVRET.yearAcad}</strong> },
+          { label: 'Année de règlement',    value: <strong>{LIVRET.anneeReg}</strong> },
+          { label: 'Statut de carrière',    value: (
               <span className="inline-flex items-center gap-1.5">
                 <span className="inline-block h-2 w-2 rounded-full bg-green-500 shrink-0" />
-                <strong>attivo</strong>&nbsp;per&nbsp;<strong>Immatricolazione</strong>
+                <strong>actif</strong>&nbsp;pour&nbsp;<strong>Immatriculation</strong>
               </span>
             )
           },
-          { label: 'Classe laurea',         value: <strong>L-31 — Scienze e tecnologie informatiche</strong> },
-          { label: 'Data immatricolazione', value: <strong>{LIBRETTO.dateImmat}</strong> },
+          { label: 'Diplôme',               value: <strong>L-31 — Sciences de l'informatique</strong> },
+          { label: "Date d'immatriculation", value: <strong>{LIVRET.dateImmat}</strong> },
         ].map((r, i) => (
           <div key={i} className="flex gap-3 text-sm">
             <span className="w-44 shrink-0 text-muted-foreground">{r.label}</span>
@@ -156,7 +156,7 @@ function StatusContent() {
 
       <div>
         <div className="flex justify-between text-[11px] text-muted-foreground mb-1.5">
-          <span>Progressione del percorso</span>
+          <span>Progression du cursus</span>
           <span className="font-semibold tabular-nums">{pct}%</span>
         </div>
         <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
@@ -165,12 +165,12 @@ function StatusContent() {
       </div>
 
       <div className="rounded-xl border bg-muted/30 p-4">
-        <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-3">Riepilogo Esami</p>
+        <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-3">Récapitulatif des examens</p>
         <div className="grid grid-cols-3 gap-2 text-center">
           {[
-            { val: LIBRETTO.examsCount,              lbl: 'Esami registrati'  },
-            { val: LIBRETTO.weightedMean.toFixed(2), lbl: 'Media pond. / 30'  },
-            { val: LIBRETTO.laureaEst.toFixed(1),    lbl: 'Stima laurea / 110' },
+            { val: LIVRET.examsCount,              lbl: 'Examens enregistrés' },
+            { val: LIVRET.weightedMean.toFixed(2), lbl: 'Moy. pond. / 30'    },
+            { val: LIVRET.laureaEst.toFixed(1),    lbl: 'Est. Laurea / 110'   },
           ].map(s => (
             <div key={s.lbl}>
               <p className="text-xl font-black text-primary tabular-nums">{s.val}</p>
@@ -181,16 +181,16 @@ function StatusContent() {
       </div>
 
       <Link href="/student/libretto" className="text-[12px] text-primary hover:underline underline-offset-2">
-        Vai al mio libretto →
+        Aller à mon livret →
       </Link>
     </div>
   )
 }
 
-// ─── Contenu : Corsi del giorno ───────────────────────────────────────────────
-function CorsiContent() {
+// ─── Contenu : Cours du jour ──────────────────────────────────────────────────
+function CoursContent() {
   if (TODAY_SLOTS.length === 0) {
-    return <p className="text-sm text-muted-foreground">Nessun corso previsto oggi.</p>
+    return <p className="text-sm text-muted-foreground">Aucun cours prévu aujourd'hui.</p>
   }
   return (
     <div className="space-y-2">
@@ -208,21 +208,21 @@ function CorsiContent() {
             </p>
             {slot.mode === 'online' && (
               <span className="mt-1.5 inline-flex items-center rounded-full bg-violet-100 text-violet-700 border border-violet-200 dark:bg-violet-950/30 dark:text-violet-400 dark:border-violet-800 px-2 py-0.5 text-[10px] font-bold">
-                Online
+                En ligne
               </span>
             )}
           </div>
         </div>
       ))}
       <Link href="/student/schedule" className="text-[12px] text-primary hover:underline underline-offset-2">
-        Vedi orario delle lezioni →
+        Voir l'emploi du temps complet →
       </Link>
     </div>
   )
 }
 
-// ─── Contenu : Prossime scadenze ──────────────────────────────────────────────
-function ScadenzeContent() {
+// ─── Contenu : Prochaines échéances ──────────────────────────────────────────
+function EcheancesContent() {
   const icons: Record<string, string> = { exam_reg: '📅', payment: '💰', project: '📋', exam: '📝' }
   return (
     <div className="space-y-2">
@@ -252,7 +252,7 @@ function ScadenzeContent() {
                   ? 'bg-amber-100 text-amber-800 border-amber-200'
                   : 'bg-muted text-muted-foreground border-border'
             }`}>
-              {dl.daysLeft <= 1 ? 'Domani!' : `G−${dl.daysLeft}`}
+              {dl.daysLeft <= 1 ? 'Demain !' : `J−${dl.daysLeft}`}
             </span>
           </Link>
         )
@@ -261,8 +261,8 @@ function ScadenzeContent() {
   )
 }
 
-// ─── Contenu : Messageria ─────────────────────────────────────────────────────
-function MessageriaContent() {
+// ─── Contenu : Messagerie ─────────────────────────────────────────────────────
+function MessagerieContent() {
   return (
     <div className="space-y-2">
       {ANNOUNCEMENTS.map(ann => (
@@ -277,7 +277,7 @@ function MessageriaContent() {
               <p className="text-[11px] font-semibold">{ann.from}</p>
               {ann.urgent && (
                 <span className="rounded-full bg-orange-100 text-orange-700 dark:bg-orange-950/30 dark:text-orange-400 px-1.5 py-0.5 text-[9px] font-bold">
-                  Urgente
+                  Urgent
                 </span>
               )}
               <span className="text-[10px] text-muted-foreground ml-auto">{ann.ago}</span>
@@ -295,8 +295,8 @@ export function StudentDashboard() {
   const urgentCount = DEADLINES.filter(d => d.daysLeft <= 2).length
   const unreadCount = ANNOUNCEMENTS.filter(a => a.urgent).length
 
-  const h    = new Date().getHours()
-  const greet = h < 12 ? 'Buongiorno,' : h < 18 ? 'Buon pomeriggio,' : 'Buona sera,'
+  const h     = new Date().getHours()
+  const greet = h < 12 ? 'Bonjour,' : h < 18 ? 'Bon après-midi,' : 'Bonsoir,'
 
   return (
     <div className="max-w-6xl mx-auto">
@@ -318,25 +318,24 @@ export function StudentDashboard() {
           {/* Paragraphes institutionnels */}
           <div className="space-y-4 text-sm leading-relaxed text-foreground/80 max-w-lg">
             <p>
-              Benvenuto nella tua area riservata: utilizza il menu in alto a destra per navigare nel portale.
+              Bienvenue dans votre espace réservé : utilisez le menu en haut à droite pour naviguer dans le portail.
             </p>
             <p>
-              Se vuoi modificare la tua password{' '}
+              Si vous souhaitez modifier votre mot de passe{' '}
               <Link href="/student/settings" className="text-primary underline underline-offset-2 hover:no-underline">
-                clicca qui
+                cliquez ici
               </Link>.
             </p>
             <p>
-              Se vuoi utilizzare gli altri servizi on line dell'ateneo{' '}
+              Si vous souhaitez utiliser les autres services en ligne de l'université{' '}
               <Link href="/student/settings" className="text-primary underline underline-offset-2 hover:no-underline">
-                clicca qui
+                cliquez ici
               </Link>.
             </p>
             <p>
-              Se hai effettuato l'accesso con SPID o CIE e non ricordi le credenziali di ateneo — che sono
-              indispensabili per accedere agli altri servizi on line — le puoi recuperare{' '}
+              Si vous vous êtes connecté(e) avec SPID ou CIE et que vous ne vous souvenez pas de vos identifiants universitaires — indispensables pour accéder aux autres services en ligne — vous pouvez les récupérer{' '}
               <Link href="/student/settings" className="text-primary underline underline-offset-2 hover:no-underline">
-                cliccando qui
+                en cliquant ici
               </Link>.
             </p>
           </div>
@@ -347,41 +346,41 @@ export function StudentDashboard() {
           <div className="rounded-xl border border-border overflow-hidden shadow-sm">
 
             <Section
-              title="Dati personali"
-              subtitle={`Reale name: ${STUDENT.realName}`}
+              title="Données personnelles"
+              subtitle={`Nom légal : ${STUDENT.realName}`}
             >
               <ProfilContent />
             </Section>
 
             <Section
-              title="Status studente"
-              badge={`${LIBRETTO.examsCount} esami`}
+              title="Statut étudiant"
+              badge={`${LIVRET.examsCount} examens`}
               defaultOpen
             >
               <StatusContent />
             </Section>
 
             <Section
-              title="Corsi del giorno"
-              badge={`${TODAY_SLOTS.length} corsi`}
+              title="Cours du jour"
+              badge={`${TODAY_SLOTS.length} cours`}
             >
-              <CorsiContent />
+              <CoursContent />
             </Section>
 
             <Section
-              title="Prossime scadenze"
-              badge={urgentCount > 0 ? `${urgentCount} urgente` : `${DEADLINES.length} in arrivo`}
+              title="Prochaines échéances"
+              badge={urgentCount > 0 ? `${urgentCount} urgent${urgentCount > 1 ? 's' : ''}` : `${DEADLINES.length} à venir`}
               badgeRed={urgentCount > 0}
             >
-              <ScadenzeContent />
+              <EcheancesContent />
             </Section>
 
             <Section
-              title="Messageria"
-              badge={unreadCount > 0 ? `${unreadCount} non letto` : undefined}
+              title="Messagerie"
+              badge={unreadCount > 0 ? `${unreadCount} non lu${unreadCount > 1 ? 's' : ''}` : undefined}
               badgeRed={unreadCount > 0}
             >
-              <MessageriaContent />
+              <MessagerieContent />
             </Section>
 
           </div>
