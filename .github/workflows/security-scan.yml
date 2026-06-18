@@ -30,7 +30,7 @@ jobs:
       # ─── 1. ZAP Baseline Scan ───────────────────────────────────────────────
       # Scan passif — ne modifie pas les données, détecte les vulnérabilités courantes
       - name: ZAP Baseline Scan (web frontend)
-        uses: zaproxy/action-baseline@v0.12.0
+        uses: zaproxy/action-baseline@v0.15.0
         with:
           target: ${{ github.event.inputs.target_url || 'https://unigest-staging.vercel.app' }}
           rules_file_name: '.github/zap-rules.tsv'
