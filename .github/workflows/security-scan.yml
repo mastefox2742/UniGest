@@ -25,7 +25,7 @@ jobs:
       security-events: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       # ─── 1. ZAP Baseline Scan ───────────────────────────────────────────────
       # Scan passif — ne modifie pas les données, détecte les vulnérabilités courantes
