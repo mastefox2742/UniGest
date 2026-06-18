@@ -283,6 +283,103 @@ function MessagerieContent() {
   )
 }
 
+// ─── Sidebar desktop ─────────────────────────────────────────────────────────
+function DesktopSidebar() {
+  const pct = Math.round((LIBRETTO.cfuEarned / LIBRETTO.cfuTotal) * 100)
+  const urgentDeadlines = DEADLINES.filter(d => d.daysLeft <= 7)
+  const icons = { exam_reg: '📅', payment: '💰', project: '📋', exam: '📝' }
+
+  return (
+    <aside className="space-y-4">
+
+      {/* Statut rapide */}
+      <div className="rounded-xl border bg-card shadow-sm p-5">
+        <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-3">Cursus</p>
+        <div className="flex items-center gap-2 mb-1">
+          <span className="h-2 w-2 rounded-full bg-green-500 shrink-0" />
+          <span className="text-sm font-medium">{LIBRETTO.yearAcad}</span>
+        </div>
+        <p className="text-[12px] text-muted-foreground mb-3">{STUDENT.degreeCode} — {STUDENT.degree}</p>
+        <div className="flex justify-between text-[11px] text-muted-foreground mb-1">
+          <span>Progression</span>
+          <span className="font-semibold">{LIBRETTO.cfuEarned}/{LIBRETTO.cfuTotal} CFU · {pct}%</span>
+        </div>
+        <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+          <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
+        </div>
+        <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+          {[
+            { val: LIBRETTO.examsCount, lbl: 'Examens' },
+            { val: LIBRETTO.weightedMean.toFixed(1), lbl: 'Moy./30' },
+            { val: LIBRETTO.laureaEst.toFixed(0), lbl: 'Est./110' },
+          ].map(s => (
+            <div key={s.lbl} className="rounded-lg bg-muted/40 py-2">
+              <p className="text-base font-bold text-primary">{s.val}</p>
+              <p className="text-[10px] text-muted-foreground">{s.lbl}</p>
+            </div>
+          ))}
+        </div>
+        <Link href="/student/libretto" className="mt-3 block text-[12px] text-primary hover:underline underline-offset-2">
+          Voir le libretto →
+        </Link>
+      </div>
+
+      {/* Cours du jour compact */}
+      <div className="rounded-xl border bg-card shadow-sm p-5">
+        <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-3">Cours du jour</p>
+        {TODAY_SLOTS.length === 0
+          ? <p className="text-sm text-muted-foreground">Aucun cours aujourd'hui.</p>
+          : (
+            <div className="space-y-3">
+              {TODAY_SLOTS.map(s => (
+                <div key={s.id} className="flex gap-3 items-start">
+                  <span className="text-[11px] font-bold tabular-nums text-muted-foreground w-10 shrink-0 pt-0.5">{s.startTime}</span>
+                  <div>
+                    <p className="text-[12px] font-semibold leading-tight">{s.course}</p>
+                    <p className="text-[11px] text-muted-foreground">{s.room ?? 'En ligne'}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
+        }
+        <Link href="/student/schedule" className="mt-3 block text-[12px] text-primary hover:underline underline-offset-2">
+          Emploi du temps →
+        </Link>
+      </div>
+
+      {/* Échéances urgentes */}
+      {urgentDeadlines.length > 0 && (
+        <div className="rounded-xl border bg-card shadow-sm p-5">
+          <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-3">Échéances proches</p>
+          <div className="space-y-2">
+            {urgentDeadlines.map(dl => (
+              <Link
+                key={dl.id}
+                href={dl.href}
+                className="flex items-center justify-between gap-2 hover:opacity-80 transition-opacity"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-sm shrink-0">{icons[dl.type]}</span>
+                  <p className="text-[12px] leading-tight truncate">{dl.label}</p>
+                </div>
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold border ${
+                  dl.daysLeft <= 2
+                    ? 'bg-red-100 text-red-800 border-red-200'
+                    : 'bg-amber-100 text-amber-800 border-amber-200'
+                }`}>
+                  J−{dl.daysLeft}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
+    </aside>
+  )
+}
+
 // ─── Composant principal ──────────────────────────────────────────────────────
 export function StudentDashboard() {
   const [time, setTime] = useState(new Date())
@@ -299,68 +396,82 @@ export function StudentDashboard() {
   const unreadCount = ANNOUNCEMENTS.filter(a => a.urgent).length
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className="max-w-6xl mx-auto">
 
-      {/* ── En-tête de bienvenue ──────────────────────────────────────────── */}
-      <div className="mb-8">
+      {/* ── En-tête pleine largeur ────────────────────────────────────────── */}
+      <div className="mb-6 lg:mb-8">
         <p className="text-sm text-muted-foreground mb-1">{hello},</p>
-        <h1 className="text-3xl font-bold leading-tight tracking-tight uppercase">
+        <h1 className="text-2xl lg:text-4xl font-bold leading-tight tracking-tight uppercase">
           {STUDENT.fullName}
         </h1>
         <div className="mt-1 h-1 w-12 rounded-full bg-primary" />
-        <p className="mt-4 text-sm text-muted-foreground leading-relaxed">
+        <p className="mt-3 text-sm text-muted-foreground leading-relaxed max-w-xl">
           Bienvenue dans votre espace étudiant. Utilisez les sections ci-dessous pour accéder à vos informations.
         </p>
-        <p className="mt-2 text-sm text-muted-foreground">
+        <p className="mt-1.5 text-sm text-muted-foreground">
           Pour modifier votre mot de passe{' '}
           <Link href="/student/settings" className="text-primary underline underline-offset-2">cliquez ici</Link>.
         </p>
       </div>
 
-      {/* ── Sections accordéon ───────────────────────────────────────────── */}
-      <div className="rounded-xl border bg-card shadow-sm divide-y overflow-hidden">
-        <div className="px-5">
+      {/* ── Layout responsive : accordéon + sidebar ──────────────────────── */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
 
-          <Section title="Données personnelles">
-            <ProfilContent />
-          </Section>
+        {/* Accordéon — pleine largeur sur mobile, 2/3 sur desktop */}
+        <div className="lg:col-span-2">
+          <div className="rounded-xl border bg-card shadow-sm divide-y overflow-hidden">
+            <div className="px-4 lg:px-6">
 
-          <Section
-            title="Statut étudiant"
-            badge={`${LIBRETTO.examsCount} examens`}
-            defaultOpen
-          >
-            <StatusContent />
-          </Section>
+              <Section title="Données personnelles">
+                <ProfilContent />
+              </Section>
 
-          <Section
-            title="Cours du jour"
-            badge={`${TODAY_SLOTS.length} cours`}
-          >
-            <CoursContent />
-          </Section>
+              <Section
+                title="Statut étudiant"
+                badge={`${LIBRETTO.examsCount} examens`}
+                defaultOpen
+              >
+                <StatusContent />
+              </Section>
 
-          <Section
-            title="Prochaines échéances"
-            badge={urgentCount > 0 ? `${urgentCount} urgent${urgentCount > 1 ? 's' : ''}` : `${DEADLINES.length} à venir`}
-            badgeRed={urgentCount > 0}
-          >
-            <EcheancesContent />
-          </Section>
+              {/* Cours du jour visible dans accordéon sur mobile seulement */}
+              <div className="lg:hidden">
+                <Section
+                  title="Cours du jour"
+                  badge={`${TODAY_SLOTS.length} cours`}
+                >
+                  <CoursContent />
+                </Section>
+              </div>
 
-          <Section
-            title="Messagerie"
-            badge={unreadCount > 0 ? `${unreadCount} non lu${unreadCount > 1 ? 's' : ''}` : undefined}
-            badgeRed={unreadCount > 0}
-          >
-            <MessagerieContent />
-          </Section>
+              <Section
+                title="Prochaines échéances"
+                badge={urgentCount > 0 ? `${urgentCount} urgent${urgentCount > 1 ? 's' : ''}` : `${DEADLINES.length} à venir`}
+                badgeRed={urgentCount > 0}
+              >
+                <EcheancesContent />
+              </Section>
 
+              <Section
+                title="Messagerie"
+                badge={unreadCount > 0 ? `${unreadCount} non lu${unreadCount > 1 ? 's' : ''}` : undefined}
+                badgeRed={unreadCount > 0}
+              >
+                <MessagerieContent />
+              </Section>
+
+            </div>
+          </div>
         </div>
+
+        {/* Sidebar — masquée sur mobile, 1/3 sur desktop */}
+        <div className="hidden lg:block">
+          <DesktopSidebar />
+        </div>
+
       </div>
 
-      {/* ── Liens rapides ────────────────────────────────────────────────── */}
-      <div className="mt-6 text-center">
+      <div className="mt-5 text-center">
         <p className="text-[12px] text-muted-foreground">
           Accédez aux autres services via le menu de navigation.
         </p>
