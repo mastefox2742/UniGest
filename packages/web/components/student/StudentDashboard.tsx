@@ -1,21 +1,19 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
-import { ChevronRight, ChevronDown } from 'lucide-react'
 
-// ─── Données démo ─────────────────────────────────────────────────────────────
+// ─── Données ──────────────────────────────────────────────────────────────────
 const STUDENT = {
-  firstName:  'Demo',
-  lastName:   'Étudiant',
-  fullName:   'Demo Étudiant',
+  fullName:   'Miche Fresneil Zlat Mboni Obambi',
+  realName:   'MICHE FRESNEIL',
   matricola:  'M-2024-001',
-  degree:     'Sciences de l\'Informatique',
+  degree:     'Scienze e tecnologie informatiche',
   degreeCode: 'L-31',
-  year:       2,
-  email:      'demo.etudiant@unigest.fr',
-  phone:      '+33 6 12 34 56 78',
-  address:    '12 Rue de l\'Université, 75005 Paris',
+  year:       1,
+  email:      'miche.fresneil@studenti.unigest.it',
+  phone:      '+39 333 123 4567',
+  address:    "Via dell'Università 1, 56126 Pisa PI",
 }
 
 const LIBRETTO = {
@@ -26,70 +24,78 @@ const LIBRETTO = {
   examsCount:   5,
   yearAcad:     '2025/2026',
   anneeReg:     '2024',
-  enrollment:   'actif',
   dateImmat:    '11/12/2024',
 }
 
 const TODAY_SLOTS = [
-  { id: 'c1', startTime: '08:30', endTime: '10:30', course: 'Analyse Mathématique II',  code: 'MAT201', teacher: 'Prof. Rossi Marco',   room: 'Salle B201', mode: 'presential' as const },
-  { id: 'c2', startTime: '11:00', endTime: '13:00', course: 'Réseaux Informatiques',    code: 'INF302', teacher: 'Prof. Conti Paolo',   room: null,         mode: 'online'     as const },
-  { id: 'c3', startTime: '14:30', endTime: '16:30', course: 'Bases de données (TD)',    code: 'INF301', teacher: 'Prof. Ferrari Anna',  room: 'Salle D102', mode: 'presential' as const },
+  { id: 'c1', startTime: '08:30', endTime: '10:30', course: 'Analisi Matematica II',  teacher: 'Prof. Rossi Marco',  room: 'Aula B201', mode: 'presential' as const },
+  { id: 'c2', startTime: '11:00', endTime: '13:00', course: 'Reti Informatiche',       teacher: 'Prof. Conti Paolo',  room: null,         mode: 'online'     as const },
+  { id: 'c3', startTime: '14:30', endTime: '16:30', course: 'Basi di dati (TD)',       teacher: 'Prof. Ferrari Anna', room: 'Aula D102',  mode: 'presential' as const },
 ]
 
 const DEADLINES = [
-  { id: 'd1', label: 'Fermeture — Analyse Mathématique II', detail: 'Inscriptions examen (session juin)', daysLeft: 2,  href: '/student/exams', type: 'exam_reg' as const },
-  { id: 'd2', label: '2ème tranche 2025/2026 — 450 €',      detail: 'Date limite paiement des frais',   daysLeft: 5,  href: '/student/fees',  type: 'payment'  as const },
-  { id: 'd3', label: 'Fermeture — Réseaux Informatiques',   detail: 'Inscriptions examen (session juin)', daysLeft: 6,  href: '/student/exams', type: 'exam_reg' as const },
-  { id: 'd4', label: 'Rendu projet — Prog. Avancée',         detail: 'Dépôt du projet final',             daysLeft: 14, href: '/student/courses', type: 'project' as const },
+  { id: 'd1', label: 'Chiusura — Analisi Matematica II', detail: 'Iscrizione esame (sessione giugno)', daysLeft: 2,  href: '/student/exams',   type: 'exam_reg' as const },
+  { id: 'd2', label: "2ª rata 2025/2026 — 450 €",        detail: 'Scadenza pagamento tasse',           daysLeft: 5,  href: '/student/fees',    type: 'payment'  as const },
+  { id: 'd3', label: 'Chiusura — Reti Informatiche',      detail: 'Iscrizione esame (sessione giugno)', daysLeft: 6,  href: '/student/exams',   type: 'exam_reg' as const },
+  { id: 'd4', label: 'Consegna progetto — Prog. Avanzata', detail: 'Caricamento progetto finale',       daysLeft: 14, href: '/student/courses', type: 'project'  as const },
 ]
 
 const ANNOUNCEMENTS = [
-  { id: 'a1', from: 'Prof. Conti Paolo', role: 'teacher' as const, msg: 'Le cours de Réseaux de demain se déroulera en visioconférence uniquement.', ago: 'il y a 2 h', urgent: true },
-  { id: 'a2', from: 'Secrétariat',       role: 'admin'   as const, msg: 'Rappel : la session de juin ouvre les inscriptions aux examens le 25 mai.', ago: 'il y a 1 j', urgent: false },
-  { id: 'a3', from: 'Prof. Ferrari',     role: 'teacher' as const, msg: 'La correction du TP3 est disponible dans l\'espace cours INF301.', ago: 'il y a 3 j', urgent: false },
+  { id: 'a1', from: 'Prof. Conti Paolo', role: 'teacher' as const, msg: "Il corso di Reti di domani si terrà esclusivamente in videoconferenza.", ago: '2 ore fa',     urgent: true  },
+  { id: 'a2', from: 'Segreteria',        role: 'admin'   as const, msg: "Promemoria: la sessione di giugno apre le iscrizioni agli esami il 25 maggio.", ago: '1 giorno fa', urgent: false },
+  { id: 'a3', from: 'Prof. Ferrari',     role: 'teacher' as const, msg: "La correzione del TP3 è disponibile nello spazio corso INF301.",            ago: '3 giorni fa', urgent: false },
 ]
 
-// ─── Section accordéon ────────────────────────────────────────────────────────
+// ─── Section accordéon style ALICE ────────────────────────────────────────────
 interface SectionProps {
-  title:    string
-  badge?:   string
-  badgeRed?: boolean
-  children: React.ReactNode
+  title:        string
+  subtitle?:    string
+  badge?:       string
+  badgeRed?:    boolean
+  children:     React.ReactNode
   defaultOpen?: boolean
 }
 
-function Section({ title, badge, badgeRed, children, defaultOpen = false }: SectionProps) {
+function Section({ title, subtitle, badge, badgeRed, children, defaultOpen = false }: SectionProps) {
   const [open, setOpen] = useState(defaultOpen)
 
   return (
-    <div className="border-b last:border-b-0">
+    <div className={`border-b border-border last:border-b-0 transition-colors duration-150 ${open ? 'bg-card' : 'bg-muted/20 hover:bg-muted/40'}`}>
       <button
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between px-0 py-4 text-left hover:bg-transparent group"
+        className="w-full flex items-center gap-3 px-4 py-[15px] text-left cursor-pointer"
+        aria-expanded={open}
       >
-        <div className="flex items-center gap-2">
-          <span className="font-semibold text-[15px]">{title}</span>
-          {badge && (
-            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold border ${
-              badgeRed
-                ? 'bg-red-100 text-red-700 border-red-200'
-                : 'bg-muted text-muted-foreground border-border'
-            }`}>
-              {badge}
-            </span>
+        {/* Titre + badge + sous-titre */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[17px] font-semibold leading-tight tracking-tight">{title}</span>
+            {badge && (
+              <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold border ${
+                badgeRed
+                  ? 'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-400 dark:border-orange-800'
+                  : 'bg-muted text-muted-foreground border-border'
+              }`}>
+                {badge}
+              </span>
+            )}
+          </div>
+          {subtitle && (
+            <p className="text-[12px] text-muted-foreground mt-0.5 font-normal">{subtitle}</p>
           )}
         </div>
-        <div className="flex items-center gap-1.5 text-[12px] text-muted-foreground group-hover:text-primary transition-colors">
-          <span>{open ? 'Masquer les détails' : 'Voir les détails'}</span>
-          {open
-            ? <ChevronDown className="h-3.5 w-3.5" />
-            : <ChevronRight className="h-3.5 w-3.5" />
-          }
+
+        {/* Visualizza dettagli ▶ */}
+        <div className="flex items-center gap-1.5 shrink-0 text-muted-foreground select-none">
+          <span className="text-[12px] hidden sm:inline">
+            {open ? 'Nascondi dettagli' : 'Visualizza dettagli'}
+          </span>
+          <span className={`text-[9px] font-black transition-transform duration-150 ${open ? 'rotate-90' : ''}`}>▶</span>
         </div>
       </button>
 
       {open && (
-        <div className="pb-5">
+        <div className="border-t border-border bg-card px-4 pb-5 pt-4">
           {children}
         </div>
       )}
@@ -97,44 +103,49 @@ function Section({ title, badge, badgeRed, children, defaultOpen = false }: Sect
   )
 }
 
-// ─── Contenu : Profil ─────────────────────────────────────────────────────────
+// ─── Contenu : Dati personali ─────────────────────────────────────────────────
 function ProfilContent() {
-  const rows = [
-    { label: 'Nom complet',   value: STUDENT.fullName    },
-    { label: 'Matricule',     value: STUDENT.matricola   },
-    { label: 'Email',         value: STUDENT.email       },
-    { label: 'Téléphone',     value: STUDENT.phone       },
-    { label: 'Adresse',       value: STUDENT.address     },
-  ]
   return (
-    <div className="space-y-2">
-      {rows.map(r => (
+    <div className="space-y-2.5">
+      {[
+        { label: 'Nome completo', value: STUDENT.fullName  },
+        { label: 'Matricola',     value: STUDENT.matricola },
+        { label: 'Email',         value: STUDENT.email     },
+        { label: 'Telefono',      value: STUDENT.phone     },
+        { label: 'Indirizzo',     value: STUDENT.address   },
+      ].map(r => (
         <div key={r.label} className="flex gap-3 text-sm">
           <span className="w-32 shrink-0 text-muted-foreground">{r.label}</span>
-          <span className="font-medium">{r.value}</span>
+          <span className="font-medium break-all">{r.value}</span>
         </div>
       ))}
       <div className="pt-2">
         <Link href="/student/settings" className="text-[12px] text-primary hover:underline underline-offset-2">
-          Modifier mes informations →
+          Modifica le mie informazioni →
         </Link>
       </div>
     </div>
   )
 }
 
-// ─── Contenu : Status étudiant ────────────────────────────────────────────────
+// ─── Contenu : Status studente ────────────────────────────────────────────────
 function StatusContent() {
   const pct = Math.round((LIBRETTO.cfuEarned / LIBRETTO.cfuTotal) * 100)
   return (
     <div className="space-y-4">
-      <div className="space-y-2">
+      <div className="space-y-2.5">
         {[
-          { label: 'Année académique',    value: LIBRETTO.yearAcad },
-          { label: 'Année de règlement',  value: LIBRETTO.anneeReg },
-          { label: 'Statut de carrière',  value: <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-green-500 inline-block" /><strong>actif</strong> pour Immatriculation</span> },
-          { label: 'Diplôme',             value: <strong>{LIBRETTO.cfuEarned} CFU sur {LIBRETTO.cfuTotal}</strong> },
-          { label: 'Date immatriculation', value: LIBRETTO.dateImmat },
+          { label: 'Anno Accademico',       value: <strong>{LIBRETTO.yearAcad}</strong> },
+          { label: 'Anno di Regolamento',   value: <strong>{LIBRETTO.anneeReg}</strong> },
+          { label: 'Stato Carriera',        value: (
+              <span className="inline-flex items-center gap-1.5">
+                <span className="inline-block h-2 w-2 rounded-full bg-green-500 shrink-0" />
+                <strong>attivo</strong>&nbsp;per&nbsp;<strong>Immatricolazione</strong>
+              </span>
+            )
+          },
+          { label: 'Classe laurea',         value: <strong>L-31 — Scienze e tecnologie informatiche</strong> },
+          { label: 'Data immatricolazione', value: <strong>{LIBRETTO.dateImmat}</strong> },
         ].map((r, i) => (
           <div key={i} className="flex gap-3 text-sm">
             <span className="w-44 shrink-0 text-muted-foreground">{r.label}</span>
@@ -143,49 +154,43 @@ function StatusContent() {
         ))}
       </div>
 
-      {/* Barre progression */}
       <div>
-        <div className="flex justify-between text-[11px] text-muted-foreground mb-1">
-          <span>Progression du cursus</span>
-          <span className="font-semibold">{pct}%</span>
+        <div className="flex justify-between text-[11px] text-muted-foreground mb-1.5">
+          <span>Progressione del percorso</span>
+          <span className="font-semibold tabular-nums">{pct}%</span>
         </div>
         <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
-          <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${pct}%` }} />
+          <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
         </div>
       </div>
 
-      {/* Résumé examens */}
       <div className="rounded-xl border bg-muted/30 p-4">
-        <p className="text-[11px] uppercase tracking-widest text-muted-foreground mb-2">Résumé des examens</p>
-        <div className="flex items-center justify-between">
-          <div className="text-center">
-            <p className="text-2xl font-black text-primary">{LIBRETTO.examsCount}</p>
-            <p className="text-[11px] text-muted-foreground">Enregistrés</p>
-          </div>
-          <div className="text-center">
-            <p className="text-2xl font-black text-primary">{LIBRETTO.weightedMean.toFixed(2)}</p>
-            <p className="text-[11px] text-muted-foreground">Moy. pond. / 30</p>
-          </div>
-          <div className="text-center">
-            <p className="text-2xl font-black text-primary">{LIBRETTO.laureaEst.toFixed(1)}</p>
-            <p className="text-[11px] text-muted-foreground">Est. Laurea / 110</p>
-          </div>
+        <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-3">Riepilogo Esami</p>
+        <div className="grid grid-cols-3 gap-2 text-center">
+          {[
+            { val: LIBRETTO.examsCount,              lbl: 'Esami registrati'  },
+            { val: LIBRETTO.weightedMean.toFixed(2), lbl: 'Media pond. / 30'  },
+            { val: LIBRETTO.laureaEst.toFixed(1),    lbl: 'Stima laurea / 110' },
+          ].map(s => (
+            <div key={s.lbl}>
+              <p className="text-xl font-black text-primary tabular-nums">{s.val}</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">{s.lbl}</p>
+            </div>
+          ))}
         </div>
       </div>
 
       <Link href="/student/libretto" className="text-[12px] text-primary hover:underline underline-offset-2">
-        Aller à mon libretto →
+        Vai al mio libretto →
       </Link>
     </div>
   )
 }
 
-// ─── Contenu : Cours du jour ──────────────────────────────────────────────────
-function CoursContent() {
+// ─── Contenu : Corsi del giorno ───────────────────────────────────────────────
+function CorsiContent() {
   if (TODAY_SLOTS.length === 0) {
-    return (
-      <p className="text-sm text-muted-foreground">Aucun cours prévu aujourd'hui.</p>
-    )
+    return <p className="text-sm text-muted-foreground">Nessun corso previsto oggi.</p>
   }
   return (
     <div className="space-y-2">
@@ -202,23 +207,23 @@ function CoursContent() {
               {slot.teacher}{slot.room && ` · ${slot.room}`}
             </p>
             {slot.mode === 'online' && (
-              <span className="mt-1 inline-flex items-center rounded-full bg-violet-100 text-violet-700 border border-violet-200 px-2 py-0.5 text-[10px] font-bold">
-                En ligne
+              <span className="mt-1.5 inline-flex items-center rounded-full bg-violet-100 text-violet-700 border border-violet-200 dark:bg-violet-950/30 dark:text-violet-400 dark:border-violet-800 px-2 py-0.5 text-[10px] font-bold">
+                Online
               </span>
             )}
           </div>
         </div>
       ))}
       <Link href="/student/schedule" className="text-[12px] text-primary hover:underline underline-offset-2">
-        Voir l'emploi du temps complet →
+        Vedi orario delle lezioni →
       </Link>
     </div>
   )
 }
 
-// ─── Contenu : Échéances ──────────────────────────────────────────────────────
-function EcheancesContent() {
-  const icons = { exam_reg: '📅', payment: '💰', project: '📋', exam: '📝' }
+// ─── Contenu : Prossime scadenze ──────────────────────────────────────────────
+function ScadenzeContent() {
+  const icons: Record<string, string> = { exam_reg: '📅', payment: '💰', project: '📋', exam: '📝' }
   return (
     <div className="space-y-2">
       {DEADLINES.map(dl => {
@@ -227,9 +232,9 @@ function EcheancesContent() {
           <Link
             key={dl.id}
             href={dl.href}
-            className={`flex items-center gap-3 rounded-xl border px-4 py-3 hover:brightness-95 transition-all group ${
+            className={`flex items-center gap-3 rounded-xl border px-4 py-3 hover:brightness-95 transition-all ${
               urgent
-                ? 'border-red-200 bg-red-50 dark:bg-red-950/20'
+                ? 'border-red-200 bg-red-50 dark:bg-red-950/20 dark:border-red-800'
                 : 'border-border bg-muted/20'
             }`}
           >
@@ -242,12 +247,12 @@ function EcheancesContent() {
             </div>
             <span className={`shrink-0 rounded-full border px-2.5 py-0.5 text-[10px] font-bold whitespace-nowrap ${
               urgent
-                ? 'bg-red-100 text-red-800 border-red-200'
+                ? 'bg-red-100 text-red-800 border-red-200 dark:bg-red-950/50 dark:text-red-400 dark:border-red-800'
                 : dl.daysLeft <= 7
                   ? 'bg-amber-100 text-amber-800 border-amber-200'
                   : 'bg-muted text-muted-foreground border-border'
             }`}>
-              {dl.daysLeft <= 1 ? 'Demain !' : `J−${dl.daysLeft}`}
+              {dl.daysLeft <= 1 ? 'Domani!' : `G−${dl.daysLeft}`}
             </span>
           </Link>
         )
@@ -256,8 +261,8 @@ function EcheancesContent() {
   )
 }
 
-// ─── Contenu : Messagerie ─────────────────────────────────────────────────────
-function MessagerieContent() {
+// ─── Contenu : Messageria ─────────────────────────────────────────────────────
+function MessageriaContent() {
   return (
     <div className="space-y-2">
       {ANNOUNCEMENTS.map(ann => (
@@ -268,10 +273,12 @@ function MessagerieContent() {
             {ann.role === 'admin' ? '🏛' : '👤'}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1.5 mb-0.5">
+            <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
               <p className="text-[11px] font-semibold">{ann.from}</p>
               {ann.urgent && (
-                <span className="rounded-full bg-orange-100 text-orange-700 px-1.5 py-0.5 text-[9px] font-bold">Urgent</span>
+                <span className="rounded-full bg-orange-100 text-orange-700 dark:bg-orange-950/30 dark:text-orange-400 px-1.5 py-0.5 text-[9px] font-bold">
+                  Urgente
+                </span>
               )}
               <span className="text-[10px] text-muted-foreground ml-auto">{ann.ago}</span>
             </div>
@@ -283,200 +290,104 @@ function MessagerieContent() {
   )
 }
 
-// ─── Sidebar desktop ─────────────────────────────────────────────────────────
-function DesktopSidebar() {
-  const pct = Math.round((LIBRETTO.cfuEarned / LIBRETTO.cfuTotal) * 100)
-  const urgentDeadlines = DEADLINES.filter(d => d.daysLeft <= 7)
-  const icons = { exam_reg: '📅', payment: '💰', project: '📋', exam: '📝' }
-
-  return (
-    <aside className="space-y-4">
-
-      {/* Statut rapide */}
-      <div className="rounded-xl border bg-card shadow-sm p-5">
-        <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-3">Cursus</p>
-        <div className="flex items-center gap-2 mb-1">
-          <span className="h-2 w-2 rounded-full bg-green-500 shrink-0" />
-          <span className="text-sm font-medium">{LIBRETTO.yearAcad}</span>
-        </div>
-        <p className="text-[12px] text-muted-foreground mb-3">{STUDENT.degreeCode} — {STUDENT.degree}</p>
-        <div className="flex justify-between text-[11px] text-muted-foreground mb-1">
-          <span>Progression</span>
-          <span className="font-semibold">{LIBRETTO.cfuEarned}/{LIBRETTO.cfuTotal} CFU · {pct}%</span>
-        </div>
-        <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
-          <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
-        </div>
-        <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-          {[
-            { val: LIBRETTO.examsCount, lbl: 'Examens' },
-            { val: LIBRETTO.weightedMean.toFixed(1), lbl: 'Moy./30' },
-            { val: LIBRETTO.laureaEst.toFixed(0), lbl: 'Est./110' },
-          ].map(s => (
-            <div key={s.lbl} className="rounded-lg bg-muted/40 py-2">
-              <p className="text-base font-bold text-primary">{s.val}</p>
-              <p className="text-[10px] text-muted-foreground">{s.lbl}</p>
-            </div>
-          ))}
-        </div>
-        <Link href="/student/libretto" className="mt-3 block text-[12px] text-primary hover:underline underline-offset-2">
-          Voir le libretto →
-        </Link>
-      </div>
-
-      {/* Cours du jour compact */}
-      <div className="rounded-xl border bg-card shadow-sm p-5">
-        <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-3">Cours du jour</p>
-        {TODAY_SLOTS.length === 0
-          ? <p className="text-sm text-muted-foreground">Aucun cours aujourd'hui.</p>
-          : (
-            <div className="space-y-3">
-              {TODAY_SLOTS.map(s => (
-                <div key={s.id} className="flex gap-3 items-start">
-                  <span className="text-[11px] font-bold tabular-nums text-muted-foreground w-10 shrink-0 pt-0.5">{s.startTime}</span>
-                  <div>
-                    <p className="text-[12px] font-semibold leading-tight">{s.course}</p>
-                    <p className="text-[11px] text-muted-foreground">{s.room ?? 'En ligne'}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )
-        }
-        <Link href="/student/schedule" className="mt-3 block text-[12px] text-primary hover:underline underline-offset-2">
-          Emploi du temps →
-        </Link>
-      </div>
-
-      {/* Échéances urgentes */}
-      {urgentDeadlines.length > 0 && (
-        <div className="rounded-xl border bg-card shadow-sm p-5">
-          <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-3">Échéances proches</p>
-          <div className="space-y-2">
-            {urgentDeadlines.map(dl => (
-              <Link
-                key={dl.id}
-                href={dl.href}
-                className="flex items-center justify-between gap-2 hover:opacity-80 transition-opacity"
-              >
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-sm shrink-0">{icons[dl.type]}</span>
-                  <p className="text-[12px] leading-tight truncate">{dl.label}</p>
-                </div>
-                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold border ${
-                  dl.daysLeft <= 2
-                    ? 'bg-red-100 text-red-800 border-red-200'
-                    : 'bg-amber-100 text-amber-800 border-amber-200'
-                }`}>
-                  J−{dl.daysLeft}
-                </span>
-              </Link>
-            ))}
-          </div>
-        </div>
-      )}
-
-    </aside>
-  )
-}
-
 // ─── Composant principal ──────────────────────────────────────────────────────
 export function StudentDashboard() {
-  const [time, setTime] = useState(new Date())
-
-  useEffect(() => {
-    const t = setInterval(() => setTime(new Date()), 60000)
-    return () => clearInterval(t)
-  }, [])
-
-  const hour = time.getHours()
-  const hello = hour < 12 ? 'Bonjour' : hour < 18 ? 'Bon après-midi' : 'Bonsoir'
-
   const urgentCount = DEADLINES.filter(d => d.daysLeft <= 2).length
   const unreadCount = ANNOUNCEMENTS.filter(a => a.urgent).length
 
+  const h    = new Date().getHours()
+  const greet = h < 12 ? 'Buongiorno,' : h < 18 ? 'Buon pomeriggio,' : 'Buona sera,'
+
   return (
     <div className="max-w-6xl mx-auto">
+      <div className="lg:grid lg:grid-cols-5 lg:gap-12 lg:items-start">
 
-      {/* ── En-tête pleine largeur ────────────────────────────────────────── */}
-      <div className="mb-6 lg:mb-8">
-        <p className="text-sm text-muted-foreground mb-1">{hello},</p>
-        <h1 className="text-2xl lg:text-4xl font-bold leading-tight tracking-tight uppercase">
-          {STUDENT.fullName}
-        </h1>
-        <div className="mt-1 h-1 w-12 rounded-full bg-primary" />
-        <p className="mt-3 text-sm text-muted-foreground leading-relaxed max-w-xl">
-          Bienvenue dans votre espace étudiant. Utilisez les sections ci-dessous pour accéder à vos informations.
-        </p>
-        <p className="mt-1.5 text-sm text-muted-foreground">
-          Pour modifier votre mot de passe{' '}
-          <Link href="/student/settings" className="text-primary underline underline-offset-2">cliquez ici</Link>.
-        </p>
-      </div>
+        {/* ── Gauche : bienvenue + textes institutionnels (60%) ────────── */}
+        <div className="lg:col-span-3 mb-8 lg:mb-0">
 
-      {/* ── Layout responsive : accordéon + sidebar ──────────────────────── */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <p className="text-sm text-muted-foreground mb-2">{greet}</p>
 
-        {/* Accordéon — pleine largeur sur mobile, 2/3 sur desktop */}
-        <div className="lg:col-span-2">
-          <div className="rounded-xl border bg-card shadow-sm divide-y overflow-hidden">
-            <div className="px-4 lg:px-6">
+          {/* Nom en grandes capitales — comme ALICE */}
+          <h1 className="text-[26px] sm:text-[34px] lg:text-[40px] font-black leading-[1.1] tracking-tight uppercase text-foreground break-words">
+            Bienvenue {STUDENT.fullName.toUpperCase()}
+          </h1>
 
-              <Section title="Données personnelles">
-                <ProfilContent />
-              </Section>
+          {/* Barre d'accent orange/or épaisse */}
+          <div className="mt-3 mb-6 h-[5px] w-28 rounded-sm bg-amber-500" />
 
-              <Section
-                title="Statut étudiant"
-                badge={`${LIBRETTO.examsCount} examens`}
-                defaultOpen
-              >
-                <StatusContent />
-              </Section>
-
-              {/* Cours du jour visible dans accordéon sur mobile seulement */}
-              <div className="lg:hidden">
-                <Section
-                  title="Cours du jour"
-                  badge={`${TODAY_SLOTS.length} cours`}
-                >
-                  <CoursContent />
-                </Section>
-              </div>
-
-              <Section
-                title="Prochaines échéances"
-                badge={urgentCount > 0 ? `${urgentCount} urgent${urgentCount > 1 ? 's' : ''}` : `${DEADLINES.length} à venir`}
-                badgeRed={urgentCount > 0}
-              >
-                <EcheancesContent />
-              </Section>
-
-              <Section
-                title="Messagerie"
-                badge={unreadCount > 0 ? `${unreadCount} non lu${unreadCount > 1 ? 's' : ''}` : undefined}
-                badgeRed={unreadCount > 0}
-              >
-                <MessagerieContent />
-              </Section>
-
-            </div>
+          {/* Paragraphes institutionnels */}
+          <div className="space-y-4 text-sm leading-relaxed text-foreground/80 max-w-lg">
+            <p>
+              Benvenuto nella tua area riservata: utilizza il menu in alto a destra per navigare nel portale.
+            </p>
+            <p>
+              Se vuoi modificare la tua password{' '}
+              <Link href="/student/settings" className="text-primary underline underline-offset-2 hover:no-underline">
+                clicca qui
+              </Link>.
+            </p>
+            <p>
+              Se vuoi utilizzare gli altri servizi on line dell'ateneo{' '}
+              <Link href="/student/settings" className="text-primary underline underline-offset-2 hover:no-underline">
+                clicca qui
+              </Link>.
+            </p>
+            <p>
+              Se hai effettuato l'accesso con SPID o CIE e non ricordi le credenziali di ateneo — che sono
+              indispensabili per accedere agli altri servizi on line — le puoi recuperare{' '}
+              <Link href="/student/settings" className="text-primary underline underline-offset-2 hover:no-underline">
+                cliccando qui
+              </Link>.
+            </p>
           </div>
         </div>
 
-        {/* Sidebar — masquée sur mobile, 1/3 sur desktop */}
-        <div className="hidden lg:block">
-          <DesktopSidebar />
+        {/* ── Droite : accordéons ALICE (40%) ──────────────────────────── */}
+        <div className="lg:col-span-2">
+          <div className="rounded-xl border border-border overflow-hidden shadow-sm">
+
+            <Section
+              title="Dati personali"
+              subtitle={`Reale name: ${STUDENT.realName}`}
+            >
+              <ProfilContent />
+            </Section>
+
+            <Section
+              title="Status studente"
+              badge={`${LIBRETTO.examsCount} esami`}
+              defaultOpen
+            >
+              <StatusContent />
+            </Section>
+
+            <Section
+              title="Corsi del giorno"
+              badge={`${TODAY_SLOTS.length} corsi`}
+            >
+              <CorsiContent />
+            </Section>
+
+            <Section
+              title="Prossime scadenze"
+              badge={urgentCount > 0 ? `${urgentCount} urgente` : `${DEADLINES.length} in arrivo`}
+              badgeRed={urgentCount > 0}
+            >
+              <ScadenzeContent />
+            </Section>
+
+            <Section
+              title="Messageria"
+              badge={unreadCount > 0 ? `${unreadCount} non letto` : undefined}
+              badgeRed={unreadCount > 0}
+            >
+              <MessageriaContent />
+            </Section>
+
+          </div>
         </div>
 
       </div>
-
-      <div className="mt-5 text-center">
-        <p className="text-[12px] text-muted-foreground">
-          Accédez aux autres services via le menu de navigation.
-        </p>
-      </div>
-
     </div>
   )
 }
