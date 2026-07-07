@@ -39,7 +39,7 @@ supabase login
 # Lier au projet
 supabase link --project-ref VOTRE_PROJECT_REF
 
-# Appliquer les 9 migrations
+# Appliquer toutes les migrations
 supabase db push
 ```
 
@@ -120,6 +120,10 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
 SUPABASE_SERVICE_ROLE_KEY=eyJ...
 NEXT_PUBLIC_API_URL=https://api-unigest.up.railway.app
 NEXT_PUBLIC_DEMO_MODE=false
+NEXT_PUBLIC_APP_URL=https://unigest.vercel.app
+PUBLIC_APP_URL=https://unigest.vercel.app
+SUPABASE_FUNCTIONS_URL=https://xxxx.supabase.co/functions/v1
+SENTRY_DSN=https://...
 ```
 
 ### 3.3 Désactiver le mode démo

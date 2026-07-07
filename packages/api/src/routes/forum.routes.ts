@@ -17,7 +17,7 @@ export const forumRouter = Router()
 forumRouter.get('/courses/:ecId',
   authMiddleware,
   requireRole('student', 'teacher', 'admin'),
-  async (req, res) => {
+  async (req: AuthenticatedRequest, res) => {
     try {
       const posts = await getForumPosts(req.params.ecId!)
       return res.json({ data: posts })
@@ -59,7 +59,7 @@ forumRouter.post('/courses/:ecId',
 forumRouter.post('/posts/:postId/pin',
   authMiddleware,
   requireRole('teacher', 'admin'),
-  async (req, res) => {
+  async (req: AuthenticatedRequest, res) => {
     try {
       const { isPinned } = req.body as { isPinned: boolean }
       await pinForumPost(req.params.postId!, isPinned ?? true)
@@ -76,12 +76,12 @@ forumRouter.post('/posts/:postId/pin',
 forumRouter.delete('/posts/:postId',
   authMiddleware,
   requireRole('student', 'teacher', 'admin'),
-  async (req, res) => {
+  async (req: AuthenticatedRequest, res) => {
     try {
-      await deleteForumPost(req.params.postId!)
+      await deleteForumPost(req.params.postId!, { id: req.user!.id, role: req.user!.role })
       return res.json({ data: { message: 'Post supprimé' } })
     } catch (err) {
-      return res.status(500).json({ error: (err as Error).message })
+      return res.status(403).json({ error: (err as Error).message })
     }
   },
 )

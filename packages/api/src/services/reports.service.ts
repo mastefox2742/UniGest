@@ -1,9 +1,117 @@
 import { createClient } from '@supabase/supabase-js'
+import { average, groupCount, percentage, withPercentages } from './report-rules'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 )
+
+export async function getOverviewReport() {
+  const [
+    studentsRes,
+    teachersRes,
+    feesRes,
+    gradesRes,
+    examsRes,
+    gradAppsRes,
+    placementRes,
+    kpisRes,
+  ] = await Promise.all([
+    supabase.from('students').select('id, status, nationality, enrollment_year, degree_program_id, gpa, total_cfu_earned'),
+    supabase.from('teachers').select('id, department_id'),
+    supabase.from('tuition_fees').select('status, amount, late_fee'),
+    supabase.from('grades').select('value, status, cfu'),
+    supabase.from('exam_bookings').select('status'),
+    supabase.from('graduation_applications').select('status, balance_due'),
+    supabase.from('placement_surveys').select('employment_status, sector, contract_type, survey_year'),
+    supabase.from('program_kpis').select(`
+      total_students, retention_rate, pass_rate, avg_grad_years, at_risk_count,
+      degree_programs!degree_program_id(name, code, type)
+    `),
+  ])
+
+  const students = studentsRes.data ?? []
+  const teachers = teachersRes.data ?? []
+  const fees = feesRes.data ?? []
+  const grades = gradesRes.data ?? []
+  const examBookings = examsRes.data ?? []
+  const gradApps = gradAppsRes.data ?? []
+  const placementSurveys = placementRes.data ?? []
+  const kpis = kpisRes.data ?? []
+
+  const totalStudents = students.length
+  const activeStudents = students.filter(student => ['active', 'enrolled'].includes(student.status)).length
+  const graduated = students.filter(student => student.status === 'graduated').length
+  const withdrawn = students.filter(student => student.status === 'withdrawn').length
+  const paidFees = fees.filter(fee => fee.status === 'paid')
+  const pendingFees = fees.filter(fee => ['pending', 'overdue'].includes(fee.status))
+  const publishedGrades = grades.filter(grade => ['published', 'accepted'].includes(grade.status) && grade.value !== null)
+  const numericGrades = publishedGrades
+    .map(grade => Number(grade.value))
+    .filter(value => Number.isFinite(value))
+
+  const totalRevenue = paidFees.reduce((sum, fee) => sum + Number(fee.amount), 0)
+  const outstandingFees = pendingFees.reduce((sum, fee) => sum + Number(fee.amount) + Number(fee.late_fee ?? 0), 0)
+  const teacherCount = teachers.length
+  const graduationReady = gradApps.filter(app => ['eligible', 'jury_complete', 'defended'].includes(app.status)).length
+  const diplomasIssued = gradApps.filter(app => app.status === 'diploma_issued').length
+  const employedAlumni = placementSurveys.filter(survey =>
+    ['employed', 'self_employed'].includes(survey.employment_status),
+  ).length
+  const continuingStudies = placementSurveys.filter(survey =>
+    survey.employment_status === 'continuing_studies',
+  ).length
+  const seekingEmployment = placementSurveys.filter(survey =>
+    survey.employment_status === 'seeking',
+  ).length
+
+  const enrollmentRows = groupCount(students, student => String(student.enrollment_year ?? 'Non renseigne'))
+    .sort((a, b) => a.label.localeCompare(b.label))
+    .map(row => ({ year: row.label, count: row.count }))
+
+  return {
+    totalStudents,
+    activeStudents,
+    graduated,
+    withdrawn,
+    teacherCount,
+    graduationReady,
+    diplomasIssued,
+    placementSurveyCount: placementSurveys.length,
+    employedAlumni,
+    continuingStudies,
+    seekingEmployment,
+    employmentRate: percentage(employedAlumni, placementSurveys.length),
+    avgGpa: average(students.map(student => Number(student.gpa ?? 0)).filter(value => value > 0)),
+    avgGrade: average(numericGrades),
+    avgPassRate: average(kpis.map(kpi => Number(kpi.pass_rate ?? 0)).filter(value => value > 0)),
+    abandonRate: percentage(withdrawn, totalStudents),
+    encadrementRatio: activeStudents > 0 && teacherCount > 0 ? `1/${Math.max(1, Math.round(activeStudents / teacherCount))}` : '-',
+    totalRevenue,
+    outstandingFees,
+    paymentCollectionRate: percentage(totalRevenue, totalRevenue + outstandingFees),
+    examPresenceRate: percentage(
+      examBookings.filter(booking => ['present', 'graded'].includes(booking.status)).length,
+      examBookings.length,
+    ),
+    nationalities: withPercentages(groupCount(students, student => student.nationality)),
+    studentStatusBreakdown: withPercentages(groupCount(students, student => student.status)),
+    enrollmentTrend: enrollmentRows,
+    feeBreakdown: withPercentages(groupCount(fees, fee => fee.status)),
+    graduationBreakdown: withPercentages(groupCount(gradApps, app => app.status)),
+    placementBreakdown: withPercentages(groupCount(placementSurveys, survey => survey.employment_status)),
+    placementSectors: withPercentages(groupCount(placementSurveys, survey => survey.sector)),
+    placementContracts: withPercentages(groupCount(placementSurveys, survey => survey.contract_type)),
+    programKpis: kpis.map(kpi => ({
+      total_students: kpi.total_students,
+      retention_rate: kpi.retention_rate,
+      pass_rate: kpi.pass_rate,
+      avg_grad_years: kpi.avg_grad_years,
+      at_risk_count: kpi.at_risk_count,
+      degree_programs: kpi.degree_programs,
+    })),
+  }
+}
 
 // ─── Rapport annuel global ─────────────────────────────────────────────────────
 

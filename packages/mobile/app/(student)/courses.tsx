@@ -1,9 +1,9 @@
 import {
   View, Text, StyleSheet, FlatList,
   ActivityIndicator, RefreshControl, TouchableOpacity,
-  Linking,
 } from 'react-native'
 import { useEffect, useState } from 'react'
+import { router } from 'expo-router'
 import { apiFetch } from '@/lib/api'
 
 type ElearningCourse = {
@@ -17,6 +17,12 @@ type ElearningCourse = {
   }
   elearning_sections: { count: number }[]
   elearning_materials: { count: number }[]
+  progress_summary?: {
+    total: number
+    completed: number
+    progressPct: number
+    averageProgress: number
+  }
 }
 
 export default function CoursesScreen() {
@@ -46,7 +52,14 @@ export default function CoursesScreen() {
     const materials = (item.elearning_materials as any[]) ?? []
 
     return (
-      <View style={styles.card}>
+      <TouchableOpacity
+        style={styles.card}
+        activeOpacity={0.75}
+        onPress={() => router.push({
+          pathname: '/(student)/course-detail' as never,
+          params: { ecId: item.id },
+        })}
+      >
         {/* Icône */}
         <View style={styles.courseIcon}>
           <Text style={styles.courseEmoji}>📚</Text>
@@ -68,13 +81,31 @@ export default function CoursesScreen() {
             <Text style={styles.stat}>📎 {materials.length} matériaux</Text>
           </View>
 
+          <View style={styles.progressBlock}>
+            <View style={styles.progressHeader}>
+              <Text style={styles.progressLabel}>Progression</Text>
+              <Text style={styles.progressPct}>{item.progress_summary?.progressPct ?? 0}%</Text>
+            </View>
+            <View style={styles.progressTrack}>
+              <View
+                style={[
+                  styles.progressFill,
+                  { width: `${item.progress_summary?.progressPct ?? 0}%` as `${number}%` },
+                ]}
+              />
+            </View>
+            <Text style={styles.progressMeta}>
+              {item.progress_summary?.completed ?? 0}/{item.progress_summary?.total ?? 0} terminés
+            </Text>
+          </View>
+
           {item.welcome_message && (
             <Text style={styles.welcome} numberOfLines={2}>
               {item.welcome_message}
             </Text>
           )}
         </View>
-      </View>
+      </TouchableOpacity>
     )
   }
 
@@ -82,7 +113,7 @@ export default function CoursesScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>🖥 Cours en ligne</Text>
-        <Text style={styles.subtitle}>Accédez à vos cours via le portail web</Text>
+        <Text style={styles.subtitle}>Consultez vos cours et suivez votre progression</Text>
       </View>
 
       {loading ? (
@@ -91,13 +122,6 @@ export default function CoursesScreen() {
         </View>
       ) : (
         <>
-          {/* Bannière d'info */}
-          <View style={styles.infoBanner}>
-            <Text style={styles.infoBannerText}>
-              💡 Pour accéder aux vidéos, quiz et forum, ouvrez le portail web UniGest dans votre navigateur.
-            </Text>
-          </View>
-
           <FlatList
             data={courses}
             keyExtractor={item => item.id}
@@ -174,6 +198,13 @@ const styles = StyleSheet.create({
 
   stats: { flexDirection: 'row', gap: 10, marginTop: 4 },
   stat:  { fontSize: 11, color: '#9ca3af' },
+  progressBlock:  { marginTop: 8, gap: 4 },
+  progressHeader: { flexDirection: 'row', justifyContent: 'space-between' },
+  progressLabel:  { fontSize: 11, color: '#9ca3af' },
+  progressPct:    { fontSize: 11, color: '#6366f1', fontWeight: '700' },
+  progressTrack:  { height: 6, backgroundColor: '#e5e7eb', borderRadius: 999, overflow: 'hidden' },
+  progressFill:   { height: '100%', backgroundColor: '#6366f1', borderRadius: 999 },
+  progressMeta:   { fontSize: 10, color: '#9ca3af', textAlign: 'right' },
 
   welcome: { fontSize: 12, color: '#6b7280', fontStyle: 'italic', marginTop: 4, lineHeight: 16 },
 })

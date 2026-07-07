@@ -1,6 +1,6 @@
 import type { Response } from 'express'
 import type { AuthenticatedRequest } from '../middleware/auth.middleware'
-import { getStudentDashboard, getStudentGrades } from '../services/students.service'
+import { getStudentCareer, getStudentDashboard, getStudentGrades } from '../services/students.service'
 import PDFDocument from 'pdfkit'
 
 export async function getDashboard(req: AuthenticatedRequest, res: Response) {
@@ -19,6 +19,19 @@ export async function getGrades(req: AuthenticatedRequest, res: Response) {
 
   const grades = await getStudentGrades(req.user!.id, filter)
   return res.json({ data: grades })
+}
+
+export async function getCareer(req: AuthenticatedRequest, res: Response) {
+  const semester   = req.query.semester   ? Number(req.query.semester)   : undefined
+  const courseYear = req.query.courseYear ? Number(req.query.courseYear) : undefined
+
+  const filter: { semester?: number; courseYear?: number } = {}
+  if (semester !== undefined)   filter.semester   = semester
+  if (courseYear !== undefined) filter.courseYear = courseYear
+
+  const career = await getStudentCareer(req.user!.id, filter)
+  if (!career) return res.status(404).json({ error: 'Not Found', message: 'Carriere etudiante introuvable' })
+  return res.json({ data: career })
 }
 
 export async function exportLibrettoPdf(req: AuthenticatedRequest, res: Response) {

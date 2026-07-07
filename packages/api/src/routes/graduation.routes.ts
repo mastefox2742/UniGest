@@ -1,12 +1,21 @@
 import { Router } from 'express'
-import { authMiddleware } from '../middleware/auth.middleware'
+import { authMiddleware, type AuthenticatedRequest } from '../middleware/auth.middleware'
 import { requireRole } from '../middleware/rbac.middleware'
-import { validate, AddJuryMemberSchema, SetDefenseDateSchema } from '../middleware/validate'
+import {
+  validate,
+  validateParams,
+  AddJuryMemberSchema,
+  SetDefenseDateSchema,
+  SubmitGraduationApplicationSchema,
+  UpdateGraduationStatusSchema,
+} from '../middleware/validate'
 import { auditLog } from '../middleware/mfa.middleware'
 import { documentLimiter } from '../middleware/rateLimiter'
 import {
   getAllApplications,
   getApplicationById,
+  getStudentApplication,
+  submitGraduationApplication,
   updateApplicationStatus,
   setDefenseDate,
   addJuryMember,
@@ -15,6 +24,39 @@ import {
 } from '../services/graduation.service'
 
 export const graduationRouter = Router()
+
+/** GET /api/graduation/me — demande de l'etudiant connecte */
+graduationRouter.get('/me',
+  authMiddleware,
+  requireRole('student'),
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const app = await getStudentApplication(req.user!.id)
+      return res.json({ data: app })
+    } catch (err) {
+      return res.status(500).json({ error: (err as Error).message })
+    }
+  },
+)
+
+/** POST /api/graduation/apply — soumettre sa domanda di Laurea */
+graduationRouter.post('/apply',
+  authMiddleware,
+  requireRole('student'),
+  auditLog('GRADUATION_APPLY'),
+  validate(SubmitGraduationApplicationSchema),
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const { thesisTitle } = req.body as { thesisTitle?: string }
+      const input: Parameters<typeof submitGraduationApplication>[1] = {}
+      if (thesisTitle) input.thesisTitle = thesisTitle
+      const app = await submitGraduationApplication(req.user!.id, input)
+      return res.status(201).json({ data: app })
+    } catch (err) {
+      return res.status(400).json({ error: (err as Error).message })
+    }
+  },
+)
 
 /** GET /api/graduation — toutes les demandes */
 graduationRouter.get('/',
@@ -37,6 +79,7 @@ graduationRouter.get('/',
 graduationRouter.get('/:id',
   authMiddleware,
   requireRole('admin', 'secretary'),
+  validateParams('id'),
   async (req, res) => {
     try {
       const app = await getApplicationById(req.params.id!)
@@ -51,6 +94,9 @@ graduationRouter.get('/:id',
 graduationRouter.patch('/:id/status',
   authMiddleware,
   requireRole('admin', 'secretary'),
+  auditLog('GRADUATION_STATUS_UPDATE'),
+  validateParams('id'),
+  validate(UpdateGraduationStatusSchema),
   async (req, res) => {
     try {
       const { status, notes } = req.body as { status: string; notes?: string }
@@ -70,6 +116,8 @@ graduationRouter.patch('/:id/status',
 graduationRouter.patch('/:id/defense',
   authMiddleware,
   requireRole('admin', 'secretary'),
+  auditLog('GRADUATION_DEFENSE_SET'),
+  validateParams('id'),
   validate(SetDefenseDateSchema),
   async (req, res) => {
     try {
@@ -87,6 +135,8 @@ graduationRouter.patch('/:id/defense',
 graduationRouter.post('/:id/jury',
   authMiddleware,
   requireRole('admin', 'secretary'),
+  auditLog('GRADUATION_JURY_ADD'),
+  validateParams('id'),
   validate(AddJuryMemberSchema),
   async (req, res) => {
     try {
@@ -112,6 +162,8 @@ graduationRouter.post('/:id/jury',
 graduationRouter.delete('/:id/jury/:memberId',
   authMiddleware,
   requireRole('admin', 'secretary'),
+  auditLog('GRADUATION_JURY_REMOVE'),
+  validateParams('id', 'memberId'),
   async (req, res) => {
     try {
       await removeJuryMember(req.params.memberId!, req.params.id!)
@@ -126,6 +178,7 @@ graduationRouter.delete('/:id/jury/:memberId',
 graduationRouter.post('/:id/diploma',
   authMiddleware,
   requireRole('admin', 'secretary'),
+  validateParams('id'),
   documentLimiter,
   auditLog('DIPLOMA_GENERATE'),
   async (req, res) => {

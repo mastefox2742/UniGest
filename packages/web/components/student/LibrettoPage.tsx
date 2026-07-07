@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { useLibretto, type LibrettoEntry } from '@/lib/hooks/useLibretto'
+import { useStudentCareer, type LibrettoEntry } from '@/lib/hooks/useLibretto'
 import {
   gradeValue,
   gradeVariant,
@@ -223,29 +223,39 @@ function EntryRow({
 
 // ─── Composant principal ──────────────────────────────────────────────────────
 export function LibrettoPage() {
-  const { data: rawData, isLoading } = useLibretto()
+  const { data: career, isLoading } = useStudentCareer()
   const [filter,   setFilter]   = useState<FilterStatus>('all')
   const [sortField, setSortField] = useState<SortField>('courseYear')
   const [sortDir,   setSortDir]   = useState<SortDir>('asc')
   const [exporting, setExporting] = useState(false)
 
-  // Utiliser démo si pas de données réelles
-  const passedReal: LibrettoEntry[] =
-    rawData && rawData.length > 0 ? passedEntries(rawData) : DEMO_ENTRIES_PASSED
+  const demoMode = process.env.NEXT_PUBLIC_DEMO_MODE === 'true'
 
-  const pendingEntries = DEMO_ENTRIES_PENDING as unknown as Array<LibrettoEntry & { nextExam?: string }>
+  // Utiliser la demo uniquement en mode demo explicite.
+  const passedReal: LibrettoEntry[] =
+    career?.libretto && career.libretto.length > 0
+      ? passedEntries(career.libretto)
+      : demoMode
+      ? DEMO_ENTRIES_PASSED
+      : []
+
+  const pendingEntries = demoMode
+    ? DEMO_ENTRIES_PENDING as unknown as Array<LibrettoEntry & { nextExam?: string }>
+    : []
 
   // ── Statistiques ─────────────────────────────────────────────────────────
-  const aMean  = arithmeticMean(passedReal)
-  const wMean  = weightedMean(passedReal)
-  const cfuAcq = cfuAcquired(passedReal)
-  const laurea = laureaNoteEstimate(wMean)
+  const aMean  = career?.summary.arithmeticMean ?? arithmeticMean(passedReal)
+  const wMean  = career?.summary.weightedMean ?? weightedMean(passedReal)
+  const cfuAcq = career?.summary.totalCfuEarned ?? cfuAcquired(passedReal)
+  const laurea = career?.summary.laureaStartScore ?? laureaNoteEstimate(wMean)
 
   // Déterminer le total CFU depuis les données (triennale = 180, magistrale = 120)
-  const degreeType  = passedReal[0]?.degreeType ?? ''
-  const cfuTotal    = degreeType.toLowerCase().includes('magistrale')
-    ? CFU_LAUREA_MAGISTRALE
-    : CFU_LAUREA_TRIENNALE
+  const degreeType  = career?.student.degreeType ?? passedReal[0]?.degreeType ?? ''
+  const cfuTotal    = career?.summary.totalCfu ?? (
+    degreeType.toLowerCase().includes('magistrale')
+      ? CFU_LAUREA_MAGISTRALE
+      : CFU_LAUREA_TRIENNALE
+  )
 
   // ── Tri ───────────────────────────────────────────────────────────────────
   const sortedPassed = useMemo(() => {

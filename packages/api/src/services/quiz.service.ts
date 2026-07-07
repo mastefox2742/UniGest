@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { stripCorrectAnswers } from './quiz-rules'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -81,6 +82,25 @@ export async function getQuizWithQuestions(quizId: string) {
   if (error || !data) throw new Error('Quiz introuvable')
   return data
 }
+
+export async function getQuizForStudent(quizId: string) {
+  const { data, error } = await supabase
+    .from('elearning_quizzes')
+    .select(`
+      id, title, description, time_limit_min, pass_score, max_attempts, is_published,
+      quiz_questions(
+        id, text, type, points, position,
+        quiz_options(id, text, position)
+      )
+    `)
+    .eq('id', quizId)
+    .eq('is_published', true)
+    .single()
+
+  if (error || !data) throw new Error('Quiz introuvable')
+  return stripCorrectAnswers(data)
+}
+
 
 export async function createQuestion(quizId: string, input: {
   text:     string

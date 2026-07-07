@@ -1,6 +1,8 @@
 import { Router } from 'express'
 import { authMiddleware, type AuthenticatedRequest } from '../middleware/auth.middleware'
 import { requireRole } from '../middleware/rbac.middleware'
+import { auditLog } from '../middleware/mfa.middleware'
+import { validate, CreateElearningAnnouncementSchema } from '../middleware/validate'
 import {
   upsertElearningCourse,
   publishElearningCourse,
@@ -13,6 +15,7 @@ import {
   createAssignment,
   getSubmissions,
   gradeSubmission,
+  createAnnouncement,
   getStudentElearningCourses,
   getElearningCourseForStudent,
   upsertProgress,
@@ -247,6 +250,27 @@ elearningRouter.post('/submissions/:id/grade',
       if (score === undefined) return res.status(400).json({ error: 'score est requis' })
       await gradeSubmission(req.params.id!, score, feedback)
       return res.json({ data: { message: 'Devoir noté' } })
+    } catch (err) {
+      return res.status(400).json({ error: (err as Error).message })
+    }
+  },
+)
+
+/**
+ * POST /api/elearning/courses/:ecId/announcements
+ */
+elearningRouter.post('/courses/:ecId/announcements',
+  authMiddleware,
+  requireRole('teacher', 'admin'),
+  auditLog('ELEARNING_ANNOUNCEMENT_CREATE'),
+  validate(CreateElearningAnnouncementSchema),
+  async (req, res) => {
+    try {
+      const { title, body, isPinned } = req.body as { title: string; body: string; isPinned?: boolean }
+      const input: { title: string; body: string; isPinned?: boolean } = { title, body }
+      if (isPinned !== undefined) input.isPinned = isPinned
+      const announcement = await createAnnouncement(req.params.ecId!, input)
+      return res.status(201).json({ data: announcement })
     } catch (err) {
       return res.status(400).json({ error: (err as Error).message })
     }

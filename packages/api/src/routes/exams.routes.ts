@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { authMiddleware, type AuthenticatedRequest } from '../middleware/auth.middleware'
 import { requireRole } from '../middleware/rbac.middleware'
+import { CreateExamSessionSchema, validate, validateParams } from '../middleware/validate'
 import {
   createExamSession,
   getExamsByCourse,
@@ -22,6 +23,7 @@ export const examsRouter = Router()
 examsRouter.get('/courses/:courseId/exams',
   authMiddleware,
   requireRole('teacher', 'admin', 'secretary'),
+  validateParams('courseId'),
   async (req, res) => {
     try {
       const exams = await getExamsByCourse(req.params.courseId!)
@@ -39,6 +41,8 @@ examsRouter.get('/courses/:courseId/exams',
 examsRouter.post('/courses/:courseId/exams',
   authMiddleware,
   requireRole('teacher', 'admin'),
+  validateParams('courseId'),
+  validate(CreateExamSessionSchema),
   async (req: AuthenticatedRequest, res) => {
     try {
       const { date, registrationDeadline, classroomId, maxStudents, notes } = req.body as {
@@ -77,6 +81,7 @@ examsRouter.post('/courses/:courseId/exams',
 examsRouter.get('/:examId/bookings',
   authMiddleware,
   requireRole('teacher', 'admin', 'secretary'),
+  validateParams('examId'),
   async (req, res) => {
     try {
       const bookings = await getBookingsByExam(req.params.examId!)
@@ -130,6 +135,7 @@ examsRouter.get('/my-bookings',
 examsRouter.post('/:examId/book',
   authMiddleware,
   requireRole('student'),
+  validateParams('examId'),
   async (req: AuthenticatedRequest, res) => {
     try {
       const booking = await bookExam(req.user!.id, req.params.examId!)
@@ -147,6 +153,7 @@ examsRouter.post('/:examId/book',
 examsRouter.delete('/:examId/book',
   authMiddleware,
   requireRole('student'),
+  validateParams('examId'),
   async (req: AuthenticatedRequest, res) => {
     try {
       await cancelBooking(req.user!.id, req.params.examId!)

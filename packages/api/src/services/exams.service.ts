@@ -1,5 +1,10 @@
 import { createClient } from '@supabase/supabase-js'
 import { getTeacherIdByUserId } from './courses.service'
+import {
+  assertExamBookingCanBeCancelled,
+  assertExamCanBeBooked,
+  type ExistingExamBookingForRules,
+} from './exam-booking-rules'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -15,11 +20,27 @@ export interface CreateExamSessionInput {
   notes?:               string
 }
 
+function normalizeCreateExamSessionInput(input: CreateExamSessionInput) {
+  const examDate = new Date(input.date)
+  const registrationDeadline = new Date(input.registrationDeadline)
+
+  if (Number.isNaN(examDate.getTime())) throw new Error('Date d examen invalide')
+  if (Number.isNaN(registrationDeadline.getTime())) throw new Error('Deadline de prenotation invalide')
+  if (registrationDeadline >= examDate) {
+    throw new Error('La deadline de prenotation doit preceder la date de l examen')
+  }
+  if (input.maxStudents !== undefined && input.maxStudents < 1) {
+    throw new Error('maxStudents doit etre superieur a 0')
+  }
+}
+
 /**
  * POST /api/teachers/courses/:id/exams
  * Créer un appello d'examen
  */
 export async function createExamSession(teacherUserId: string, input: CreateExamSessionInput) {
+  normalizeCreateExamSessionInput(input)
+
   // Vérifier que le cours appartient bien à cet enseignant
   const teacherId = await getTeacherIdByUserId(teacherUserId)
   if (!teacherId) throw new Error('Enseignant introuvable')
@@ -120,17 +141,14 @@ export async function bookExam(studentUserId: string, examSessionId: string) {
   // Vérifier que la deadline n'est pas dépassée
   const { data: exam } = await supabase
     .from('exam_sessions')
-    .select('id, registration_deadline, max_students, course_id')
+    .select('id, date, registration_deadline, max_students, course_id')
     .eq('id', examSessionId)
     .single()
 
   if (!exam) throw new Error('Session d\'examen introuvable')
 
-  if (new Date(exam.registration_deadline) < new Date()) {
-    throw new Error('La date limite de prénotation est dépassée')
-  }
-
   // Vérifier les places disponibles
+  let activeBookingsCount = 0
   if (exam.max_students) {
     const { count } = await supabase
       .from('exam_bookings')
@@ -138,9 +156,7 @@ export async function bookExam(studentUserId: string, examSessionId: string) {
       .eq('exam_session_id', examSessionId)
       .eq('status', 'booked')
 
-    if ((count ?? 0) >= exam.max_students) {
-      throw new Error('Aucune place disponible pour cet examen')
-    }
+    activeBookingsCount = count ?? 0
   }
 
   // Créer la prénotation (ou réactiver si annulée)
@@ -151,8 +167,37 @@ export async function bookExam(studentUserId: string, examSessionId: string) {
     .eq('exam_session_id', examSessionId)
     .maybeSingle()
 
+  const { data: activeBookings, error: activeBookingsError } = await supabase
+    .from('exam_bookings')
+    .select(`
+      id, status, exam_session_id,
+      exam_sessions!exam_session_id(id, date, course_id)
+    `)
+    .eq('student_id', student.id)
+    .eq('status', 'booked')
+
+  if (activeBookingsError) throw new Error(activeBookingsError.message)
+
+  assertExamCanBeBooked({
+    exam: {
+      id:                   exam.id,
+      courseId:             exam.course_id,
+      date:                 exam.date,
+      registrationDeadline: exam.registration_deadline,
+      maxStudents:          exam.max_students,
+    },
+    activeBookingsCount,
+    existingBooking: existing,
+    studentActiveBookings: ((activeBookings ?? []) as any[]).map((booking): ExistingExamBookingForRules => ({
+      id:            booking.id,
+      status:        booking.status,
+      examSessionId: booking.exam_session_id,
+      courseId:      booking.exam_sessions?.course_id ?? '',
+      date:          booking.exam_sessions?.date ?? '',
+    })),
+  })
+
   if (existing) {
-    if (existing.status === 'booked') throw new Error('Vous avez déjà une prénotation pour cet examen')
     // Réactiver
     const { data, error } = await supabase
       .from('exam_bookings')
@@ -199,9 +244,7 @@ export async function cancelBooking(studentUserId: string, examSessionId: string
 
   if (!exam) throw new Error('Session introuvable')
 
-  if (new Date(exam.registration_deadline) < new Date()) {
-    throw new Error('Impossible d\'annuler après la date limite')
-  }
+  assertExamBookingCanBeCancelled(exam.registration_deadline)
 
   const { error } = await supabase
     .from('exam_bookings')

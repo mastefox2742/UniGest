@@ -47,6 +47,9 @@ import { graduationRouter } from './graduation.routes'
 import { missionsRouter }   from './missions.routes'
 import { programsRouter }   from './programs.routes'
 import { reportsRouter }    from './reports.routes'
+import { auditRouter }      from './audit.routes'
+import { internshipsRouter } from './internships.routes'
+import { alumniRouter }     from './alumni.routes'
 
 router.use('/rooms',         roomsRouter)
 router.use('/calendar',      calendarRouter)
@@ -54,6 +57,9 @@ router.use('/graduation',    graduationRouter)
 router.use('/missions',      missionsRouter)
 router.use('/programs',      programsRouter)
 router.use('/reports',       reportsRouter)
+router.use('/audit',         auditRouter)
+router.use('/internships',   internshipsRouter)
+router.use('/alumni',        alumniRouter)
 
 // Phase 7 — RGPD (Articles 15, 16, 17, 20)
 import { gdprRouter } from './gdpr.routes'

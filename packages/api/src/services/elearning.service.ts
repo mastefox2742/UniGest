@@ -1,4 +1,10 @@
 import { createClient } from '@supabase/supabase-js'
+import {
+  assertAnnouncementInput,
+  assertAssignmentSubmissionInput,
+  normalizeProgressPct,
+  summarizeMaterialProgress,
+} from './elearning-rules'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -71,7 +77,8 @@ export async function getElearningCourseForTeacher(courseId: string) {
         elearning_materials(id, title, type, url, content, duration_s, position)
       ),
       elearning_assignments(id, title, description, due_date, max_score),
-      elearning_quizzes(id, title, description, is_published, time_limit_min, pass_score, max_attempts)
+      elearning_quizzes(id, title, description, is_published, time_limit_min, pass_score, max_attempts),
+      elearning_announcements(id, title, body, is_pinned, published_at, created_at)
     `)
     .eq('course_id', courseId)
     .maybeSingle()
@@ -202,6 +209,31 @@ export async function gradeSubmission(submissionId: string, score: number, feedb
   await supabase.from('elearning_submissions').update(update).eq('id', submissionId)
 }
 
+// ─── Announcements ───────────────────────────────────────────────────────────
+
+export async function createAnnouncement(ecId: string, input: {
+  title: string
+  body: string
+  isPinned?: boolean
+}) {
+  assertAnnouncementInput({ title: input.title, body: input.body })
+
+  const { data, error } = await supabase
+    .from('elearning_announcements')
+    .insert({
+      elearning_course_id: ecId,
+      title: input.title.trim(),
+      body: input.body.trim(),
+      is_pinned: input.isPinned ?? false,
+      published_at: new Date().toISOString(),
+    })
+    .select()
+    .single()
+
+  if (error || !data) throw new Error(error?.message ?? 'Impossible de creer l annonce')
+  return data
+}
+
 // ─── Vue étudiant ─────────────────────────────────────────────────────────────
 
 /**
@@ -245,9 +277,10 @@ export async function getStudentElearningCourses(studentUserId: string) {
       `)
       .eq('is_published', true)
 
-    return (data ?? []).filter(
+    const filtered = (data ?? []).filter(
       (ec: any) => ec.courses?.degree_program_id === studentData.degree_program_id,
     )
+    return addStudentProgressSummaries(filtered, student.id)
   }
 
   const courseIds = enrollments.map((e: any) => e.course_id)
@@ -265,7 +298,7 @@ export async function getStudentElearningCourses(studentUserId: string) {
     .eq('is_published', true)
     .in('course_id', courseIds)
 
-  return data ?? []
+  return addStudentProgressSummaries(data ?? [], student.id)
 }
 
 /**
@@ -290,7 +323,8 @@ export async function getElearningCourseForStudent(ecId: string, studentUserId: 
         elearning_materials(id, title, type, url, content, duration_s, position)
       ),
       elearning_assignments(id, title, description, due_date, max_score),
-      elearning_quizzes(id, title, description, is_published, time_limit_min, pass_score, max_attempts)
+      elearning_quizzes(id, title, description, is_published, time_limit_min, pass_score, max_attempts),
+      elearning_announcements(id, title, body, is_pinned, published_at, created_at)
     `)
     .eq('id', ecId)
     .single()
@@ -299,6 +333,7 @@ export async function getElearningCourseForStudent(ecId: string, studentUserId: 
 
   // Progression de l'étudiant
   let progress: Record<string, { completed: boolean; progress_pct: number }> = {}
+  let submissionsByAssignment: Record<string, unknown> = {}
   if (student) {
     const { data: prog } = await supabase
       .from('student_elearning_progress')
@@ -308,9 +343,37 @@ export async function getElearningCourseForStudent(ecId: string, studentUserId: 
     for (const p of prog ?? []) {
       progress[p.material_id] = { completed: p.completed, progress_pct: p.progress_pct }
     }
+
+    const assignmentIds = ((ec.elearning_assignments as any[]) ?? []).map(assignment => assignment.id)
+    if (assignmentIds.length > 0) {
+      const { data: submissions } = await supabase
+        .from('elearning_submissions')
+        .select('id, assignment_id, content, file_url, score, feedback, submitted_at, graded_at')
+        .eq('student_id', student.id)
+        .in('assignment_id', assignmentIds)
+
+      submissionsByAssignment = Object.fromEntries(
+        (submissions ?? []).map(submission => [submission.assignment_id, submission]),
+      )
+    }
   }
 
-  return { ec, progress }
+  const materialIds = collectMaterialIds(ec)
+  const progressRows = materialIds.map(id => ({
+    completed: progress[id]?.completed ?? false,
+    progress_pct: progress[id]?.progress_pct ?? 0,
+  }))
+
+  const assignments = ((ec.elearning_assignments as any[]) ?? []).map(assignment => ({
+    ...assignment,
+    my_submission: submissionsByAssignment[assignment.id] ?? null,
+  }))
+
+  return {
+    ec: { ...ec, elearning_assignments: assignments },
+    progress,
+    progressSummary: summarizeMaterialProgress(progressRows),
+  }
 }
 
 /**
@@ -336,7 +399,7 @@ export async function upsertProgress(
       student_id:   student.id,
       material_id:  materialId,
       completed,
-      progress_pct: progressPct,
+      progress_pct: normalizeProgressPct(progressPct),
       last_seen_at: new Date().toISOString(),
     }, { onConflict: 'student_id,material_id' })
 }
@@ -350,6 +413,10 @@ export async function submitAssignment(
   content:       string,
   fileUrl?:      string,
 ) {
+  const submissionInput: { content: string; fileUrl?: string } = { content }
+  if (fileUrl !== undefined) submissionInput.fileUrl = fileUrl
+  assertAssignmentSubmissionInput(submissionInput)
+
   const { data: student } = await supabase
     .from('students')
     .select('id')
@@ -372,4 +439,52 @@ export async function submitAssignment(
 
   if (error || !data) throw new Error('Impossible de soumettre le devoir')
   return data
+}
+
+function collectMaterialIds(ec: any) {
+  const sections = (ec?.elearning_sections as any[]) ?? []
+  return sections.flatMap(section =>
+    ((section.elearning_materials as any[]) ?? []).map(material => material.id),
+  )
+}
+
+async function addStudentProgressSummaries(courses: any[], studentId: string) {
+  if (courses.length === 0) return courses
+
+  const courseIds = courses.map(course => course.id)
+  const { data: sections } = await supabase
+    .from('elearning_sections')
+    .select('id, elearning_course_id, elearning_materials(id)')
+    .in('elearning_course_id', courseIds)
+
+  const materialCourse = new Map<string, string>()
+  for (const section of sections ?? []) {
+    for (const material of ((section.elearning_materials as any[]) ?? [])) {
+      materialCourse.set(material.id, section.elearning_course_id)
+    }
+  }
+
+  const materialIds = Array.from(materialCourse.keys())
+  const { data: progressRows } = materialIds.length > 0
+    ? await supabase
+      .from('student_elearning_progress')
+      .select('material_id, completed, progress_pct')
+      .eq('student_id', studentId)
+      .in('material_id', materialIds)
+    : { data: [] }
+
+  return courses.map(course => {
+    const courseMaterialIds = materialIds.filter(materialId => materialCourse.get(materialId) === course.id)
+    const rows = courseMaterialIds.map(materialId => {
+      const progress = (progressRows ?? []).find(row => row.material_id === materialId)
+      return {
+        completed: progress?.completed ?? false,
+        progress_pct: progress?.progress_pct ?? 0,
+      }
+    })
+    return {
+      ...course,
+      progress_summary: summarizeMaterialProgress(rows),
+    }
+  })
 }

@@ -1,31 +1,36 @@
 import { createClient } from '@supabase/supabase-js'
 import PDFDocument from 'pdfkit'
-import { Readable } from 'stream'
 import type { Response } from 'express'
+import {
+  assertCertificateType,
+  generateVerificationToken,
+  isCertificateExpired,
+  type CertificateType,
+} from './certificate-rules'
+import { createScenarioNotificationForStudent } from './notifications.service'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 )
 
-const CERT_LABELS: Record<string, string> = {
-  enrollment:  'Certificat de scolarité',
-  transcript:  'Relevé de notes officiel',
-  degree:      'Diplôme',
-  attendance:  'Attestation de présence',
-  other:       'Document officiel',
+const CERT_LABELS: Record<CertificateType, string> = {
+  enrollment: 'Certificat de scolarite',
+  transcript: 'Releve de notes officiel',
+  degree: 'Diplome',
+  attendance: 'Attestation de presence',
+  other: 'Document officiel',
 }
 
-/**
- * Générer un numéro de série unique  (ex: CERT-2025-004521)
- */
-function generateSerial(): string {
-  const year   = new Date().getFullYear()
+function generateSerial() {
+  const year = new Date().getFullYear()
   const suffix = Math.floor(Math.random() * 900000 + 100000)
   return `CERT-${year}-${suffix}`
 }
 
-// ─── Lecture ──────────────────────────────────────────────────────────────────
+function verificationBaseUrl() {
+  return process.env.PUBLIC_APP_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? 'https://unigest.fr'
+}
 
 export async function getStudentCertificates(studentUserId: string) {
   const { data: student } = await supabase
@@ -55,7 +60,7 @@ export async function getAllCertificates(filters: { type?: string } = {}) {
   let query = supabase
     .from('certificates')
     .select(`
-      id, type, issued_at, serial_number, file_url,
+      id, type, issued_at, expires_at, serial_number, file_url,
       students!student_id(
         id, matricola,
         profiles!user_id(first_name, last_name, email)
@@ -66,52 +71,123 @@ export async function getAllCertificates(filters: { type?: string } = {}) {
     `)
     .order('issued_at', { ascending: false })
 
-  if (filters.type) query = query.eq('type', filters.type)
+  if (filters.type) {
+    assertCertificateType(filters.type)
+    query = query.eq('type', filters.type)
+  }
 
   const { data, error } = await query
   if (error) throw new Error(error.message)
   return data ?? []
 }
 
-// ─── Émission ─────────────────────────────────────────────────────────────────
-
 export interface IssueCertificateInput {
-  studentId:   string  // UUID de la table students
-  type:        string  // cert_type enum
-  secretaryId: string  // UUID de la table secretaries
-  expiresAt?:  string  // ISO date optionnelle
+  studentId: string
+  type: string
+  secretaryId: string
+  expiresAt?: string
 }
 
-/**
- * Créer l'entrée certificate en base (sans fichier — le PDF est généré à la demande)
- */
 export async function issueCertificate(input: IssueCertificateInput) {
-  const serial = generateSerial()
+  assertCertificateType(input.type)
 
-  const { data, error } = await supabase
-    .from('certificates')
-    .insert({
-      student_id:    input.studentId,
-      type:          input.type,
-      issued_by:     input.secretaryId,
-      serial_number: serial,
-      expires_at:    input.expiresAt ?? null,
-    })
-    .select()
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const { data, error } = await supabase
+      .from('certificates')
+      .insert({
+        student_id: input.studentId,
+        type: input.type,
+        issued_by: input.secretaryId,
+        serial_number: generateSerial(),
+        verification_token: generateVerificationToken(),
+        expires_at: input.expiresAt ?? null,
+      })
+      .select()
+      .single()
+
+    if (!error && data) {
+      await createScenarioNotificationForStudent(input.studentId, {
+        topic: 'certificate',
+        event: 'issued',
+        message: `${CERT_LABELS[input.type]} est disponible au telechargement.`,
+        link: '/student/certificates',
+      }).catch(err => console.error('[notifications] certificate issued:', err.message))
+      return data
+    }
+    if (!error || !error.message.toLowerCase().includes('duplicate')) {
+      throw new Error(error?.message ?? 'Impossible de creer le certificat')
+    }
+  }
+
+  throw new Error('Impossible de generer un numero de certificat unique')
+}
+
+export async function requestStudentCertificate(studentUserId: string, type: string) {
+  assertCertificateType(type)
+
+  const { data: student } = await supabase
+    .from('students')
+    .select('id')
+    .eq('user_id', studentUserId)
     .single()
 
-  if (error || !data) throw new Error('Impossible de créer le certificat')
-  return data
+  if (!student) throw new Error('Etudiant introuvable')
+
+  const secretaryId = await resolveFallbackSecretaryId()
+  return issueCertificate({ studentId: student.id, type, secretaryId })
 }
 
-// ─── Génération PDF (stream vers res) ────────────────────────────────────────
+export async function canUserAccessCertificate(certId: string, user: { id: string; role: string }) {
+  if (user.role === 'admin' || user.role === 'secretary') return true
+  if (user.role !== 'student') return false
+
+  const { data: student } = await supabase
+    .from('students')
+    .select('id')
+    .eq('user_id', user.id)
+    .single()
+
+  if (!student) return false
+
+  const { data: cert } = await supabase
+    .from('certificates')
+    .select('student_id')
+    .eq('id', certId)
+    .single()
+
+  return cert?.student_id === student.id
+}
+
+export async function verifyCertificate(token: string) {
+  const { data: cert } = await supabase
+    .from('certificates')
+    .select('type, serial_number, issued_at, expires_at')
+    .eq('verification_token', token)
+    .single()
+
+  if (!cert) {
+    return { valid: false, reason: 'not_found' as const }
+  }
+
+  const expired = isCertificateExpired(cert.expires_at)
+  return {
+    valid: !expired,
+    reason: expired ? 'expired' as const : null,
+    certificate: {
+      type: cert.type,
+      label: CERT_LABELS[cert.type as CertificateType] ?? CERT_LABELS.other,
+      serialNumber: cert.serial_number,
+      issuedAt: cert.issued_at,
+      expiresAt: cert.expires_at,
+    },
+  }
+}
 
 export async function streamCertificatePdf(certId: string, res: Response) {
-  // Charger les données du certificat + étudiant
   const { data: cert } = await supabase
     .from('certificates')
     .select(`
-      id, type, serial_number, issued_at, expires_at,
+      id, type, serial_number, verification_token, issued_at, expires_at,
       students!student_id(
         id, matricola, enrollment_year,
         profiles!user_id(first_name, last_name, email),
@@ -126,180 +202,150 @@ export async function streamCertificatePdf(certId: string, res: Response) {
 
   if (!cert) throw new Error('Certificat introuvable')
 
-  const student   = (cert.students as any)
-  const profile   = student?.profiles
-  const program   = student?.degree_programs
+  const student = cert.students as any
+  const profile = student?.profiles
+  const program = student?.degree_programs
   const secretary = (cert.secretaries as any)?.profiles
-
-  const label      = CERT_LABELS[cert.type] ?? 'Document officiel'
+  const certType = cert.type as CertificateType
+  const label = CERT_LABELS[certType] ?? CERT_LABELS.other
   const issuedDate = new Date(cert.issued_at).toLocaleDateString('fr-FR', {
-    year: 'numeric', month: 'long', day: 'numeric',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
   })
+  const fullName = [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') || 'Etudiant'
+  const verifyUrl = `${verificationBaseUrl()}/verify/certificates/${cert.verification_token}`
 
   res.setHeader('Content-Type', 'application/pdf')
-  res.setHeader(
-    'Content-Disposition',
-    `attachment; filename="UniGest_${cert.type}_${cert.serial_number}.pdf"`,
-  )
+  res.setHeader('Content-Disposition', `attachment; filename="UniGest_${cert.type}_${cert.serial_number}.pdf"`)
 
   const doc = new PDFDocument({ size: 'A4', margin: 60 })
   doc.pipe(res)
 
-  // ── En-tête ────────────────────────────────────────────────────────────────
-  doc
-    .rect(0, 0, doc.page.width, 120)
-    .fill('#1a365d')
-
+  doc.rect(0, 0, doc.page.width, 120).fill('#1a365d')
   doc
     .fillColor('white')
     .fontSize(26)
     .font('Helvetica-Bold')
-    .text('🎓 UniGest', 60, 30)
-
-  doc
+    .text('UniGest', 60, 30)
     .fontSize(11)
     .font('Helvetica')
-    .text('Università degli Studi UniGest', 60, 65)
-    .text('Système de Gestion Universitaire', 60, 82)
+    .text('Universita degli Studi UniGest', 60, 65)
+    .text('Systeme de Gestion Universitaire', 60, 82)
 
-  // ── Titre du certificat ────────────────────────────────────────────────────
   doc
     .fillColor('#1a365d')
     .fontSize(22)
     .font('Helvetica-Bold')
     .text(label.toUpperCase(), 60, 150, { align: 'center' })
 
-  doc
-    .moveTo(60, 185)
-    .lineTo(doc.page.width - 60, 185)
-    .strokeColor('#1a365d')
-    .lineWidth(2)
-    .stroke()
+  doc.moveTo(60, 185).lineTo(doc.page.width - 60, 185).strokeColor('#1a365d').lineWidth(2).stroke()
 
-  // ── Corps ──────────────────────────────────────────────────────────────────
   const bodyY = 210
-  doc
-    .fillColor('#333')
-    .fontSize(13)
-    .font('Helvetica')
+  doc.fillColor('#333').fontSize(13).font('Helvetica')
 
-  if (cert.type === 'enrollment') {
-    doc.text(
-      `L'Université UniGest certifie que :`,
-      60, bodyY,
-    )
+  if (certType === 'enrollment') {
+    doc.text("L'Universite UniGest certifie que :", 60, bodyY)
     doc
       .fontSize(16)
       .font('Helvetica-Bold')
       .fillColor('#1a365d')
-      .text(
-        `${profile?.first_name ?? ''} ${profile?.last_name ?? ''}`,
-        60, bodyY + 30,
-        { align: 'center' },
-      )
-    doc
+      .text(fullName, 60, bodyY + 30, { align: 'center' })
       .fontSize(13)
       .font('Helvetica')
       .fillColor('#333')
       .text(
-        `est régulièrement inscrit(e) à l'Université UniGest pour l'année universitaire ${student?.enrollment_year ?? '—'}/${(student?.enrollment_year ?? 0) + 1}.`,
-        60, bodyY + 65,
+        `est regulierement inscrit(e) a l'Universite UniGest pour l'annee universitaire ${student?.enrollment_year ?? '-'}${student?.enrollment_year ? `/${student.enrollment_year + 1}` : ''}.`,
+        60,
+        bodyY + 65,
         { align: 'center', width: doc.page.width - 120 },
       )
+
     if (program) {
-      doc.text(
-        `Filière : ${program.name} (${program.type?.toUpperCase()}) — ${program.total_cfu} CFU`,
-        60, bodyY + 110,
-        { align: 'center' },
-      )
+      doc.text(`Filiere : ${program.name} (${String(program.type).toUpperCase()}) - ${program.total_cfu} CFU`, 60, bodyY + 110, {
+        align: 'center',
+      })
     }
-    if (student?.matricola) {
-      doc.text(
-        `Matricule : ${student.matricola}`,
-        60, bodyY + 135,
-        { align: 'center' },
-      )
-    }
-  } else if (cert.type === 'attendance') {
+  } else if (certType === 'transcript') {
     doc
-      .text('Ce certificat atteste de l\'assiduité de :', 60, bodyY)
+      .text('Ce releve officiel atteste de la carriere academique de :', 60, bodyY)
       .fontSize(16)
       .font('Helvetica-Bold')
       .fillColor('#1a365d')
-      .text(
-        `${profile?.first_name ?? ''} ${profile?.last_name ?? ''}`,
-        60, bodyY + 30,
-        { align: 'center' },
-      )
+      .text(fullName, 60, bodyY + 30, { align: 'center' })
+      .fontSize(12)
+      .font('Helvetica')
+      .fillColor('#333')
+      .text('Le detail des notes publiees est consultable dans le libretto numerique UniGest.', 60, bodyY + 70, {
+        align: 'center',
+        width: doc.page.width - 120,
+      })
   } else {
     doc
-      .text(`Ce document officiel est délivré à :`, 60, bodyY)
+      .text('Ce document officiel est delivre a :', 60, bodyY)
       .fontSize(16)
       .font('Helvetica-Bold')
       .fillColor('#1a365d')
-      .text(
-        `${profile?.first_name ?? ''} ${profile?.last_name ?? ''}`,
-        60, bodyY + 30,
-        { align: 'center' },
-      )
+      .text(fullName, 60, bodyY + 30, { align: 'center' })
   }
 
-  // ── Informations officielles ────────────────────────────────────────────────
-  const infoY = bodyY + 200
-  doc
-    .rect(60, infoY, doc.page.width - 120, 80)
-    .fillAndStroke('#f8fafc', '#cbd5e0')
+  if (student?.matricola) {
+    doc.fillColor('#333').fontSize(12).font('Helvetica').text(`Matricule : ${student.matricola}`, 60, bodyY + 140, {
+      align: 'center',
+    })
+  }
 
+  const infoY = bodyY + 205
+  doc.rect(60, infoY, doc.page.width - 120, 96).fillAndStroke('#f8fafc', '#cbd5e0')
   doc
     .fillColor('#333')
     .fontSize(10)
     .font('Helvetica')
-    .text(`Délivré le : ${issuedDate}`, 75, infoY + 12)
-    .text(`N° de série : ${cert.serial_number}`, 75, infoY + 28)
-    .text(
-      `Délivré par : ${secretary ? `${secretary.first_name} ${secretary.last_name}` : 'Administration UniGest'}`,
-      75, infoY + 44,
-    )
+    .text(`Delivre le : ${issuedDate}`, 75, infoY + 12)
+    .text(`Numero de serie : ${cert.serial_number}`, 75, infoY + 28)
+    .text(`Delivre par : ${secretary ? `${secretary.first_name} ${secretary.last_name}` : 'Administration UniGest'}`, 75, infoY + 44)
+    .text(`Verification : ${verifyUrl}`, 75, infoY + 60, { width: doc.page.width - 150 })
 
   if (cert.expires_at) {
     const expiresDate = new Date(cert.expires_at).toLocaleDateString('fr-FR', {
-      year: 'numeric', month: 'long', day: 'numeric',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
     })
-    doc.text(`Valide jusqu'au : ${expiresDate}`, 75, infoY + 60)
+    doc.text(`Valide jusqu'au : ${expiresDate}`, 75, infoY + 78)
   }
 
-  // ── Zone signature ──────────────────────────────────────────────────────────
-  const sigY = infoY + 120
-  doc
-    .moveTo(doc.page.width - 240, sigY)
-    .lineTo(doc.page.width - 60, sigY)
-    .strokeColor('#999')
-    .lineWidth(1)
-    .stroke()
-
+  const sigY = infoY + 135
+  doc.moveTo(doc.page.width - 240, sigY).lineTo(doc.page.width - 60, sigY).strokeColor('#999').lineWidth(1).stroke()
   doc
     .fillColor('#666')
     .fontSize(9)
-    .text('Signature et cachet de l\'administration', doc.page.width - 240, sigY + 8, {
+    .text("Signature et cachet de l'administration", doc.page.width - 240, sigY + 8, {
       width: 180,
       align: 'center',
     })
 
-  // ── Pied de page ────────────────────────────────────────────────────────────
-  doc
-    .rect(0, doc.page.height - 40, doc.page.width, 40)
-    .fill('#1a365d')
-
+  doc.rect(0, doc.page.height - 44, doc.page.width, 44).fill('#1a365d')
   doc
     .fillColor('white')
     .fontSize(8)
     .font('Helvetica')
-    .text(
-      `UniGest — Document officiel — ${cert.serial_number} — unigest.fr`,
-      0,
-      doc.page.height - 26,
-      { align: 'center' },
-    )
+    .text(`UniGest - Document officiel - ${cert.serial_number}`, 0, doc.page.height - 30, { align: 'center' })
+    .text(`Verifier: ${verifyUrl}`, 0, doc.page.height - 18, { align: 'center' })
 
   doc.end()
+}
+
+async function resolveFallbackSecretaryId() {
+  const { data: anySecretary } = await supabase
+    .from('secretaries')
+    .select('id')
+    .limit(1)
+    .single()
+
+  if (!anySecretary?.id) {
+    throw new Error('Aucun secretaire trouve pour emettre le certificat')
+  }
+
+  return anySecretary.id as string
 }

@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { canDeleteForumPost } from './forum-rules'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -110,6 +111,21 @@ export async function pinForumPost(postId: string, isPinned: boolean) {
 /**
  * Supprimer un post (auteur ou teacher).
  */
-export async function deleteForumPost(postId: string) {
+export async function deleteForumPost(postId: string, requester: { id: string; role: string }) {
+  const { data: post, error: readError } = await supabase
+    .from('forum_posts')
+    .select('author_id')
+    .eq('id', postId)
+    .single()
+
+  if (readError || !post) throw new Error('Post introuvable')
+  if (!canDeleteForumPost({
+    requesterId: requester.id,
+    requesterRole: requester.role,
+    authorId: post.author_id,
+  })) {
+    throw new Error('Suppression non autorisee')
+  }
+
   await supabase.from('forum_posts').delete().eq('id', postId)
 }

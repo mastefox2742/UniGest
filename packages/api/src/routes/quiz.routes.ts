@@ -5,6 +5,7 @@ import {
   createQuiz,
   updateQuiz,
   deleteQuiz,
+  getQuizForStudent,
   getQuizWithQuestions,
   createQuestion,
   deleteQuestion,
@@ -89,9 +90,11 @@ quizRouter.delete('/:quizId',
 quizRouter.get('/:quizId',
   authMiddleware,
   requireRole('teacher', 'admin', 'student'),
-  async (req, res) => {
+  async (req: AuthenticatedRequest, res) => {
     try {
-      const quiz = await getQuizWithQuestions(req.params.quizId!)
+      const quiz = req.user!.role === 'student'
+        ? await getQuizForStudent(req.params.quizId!)
+        : await getQuizWithQuestions(req.params.quizId!)
       return res.json({ data: quiz })
     } catch (err) {
       return res.status(404).json({ error: (err as Error).message })

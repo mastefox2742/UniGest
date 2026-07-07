@@ -1,12 +1,22 @@
 import { Router } from 'express'
 import { authMiddleware, type AuthenticatedRequest } from '../middleware/auth.middleware'
 import { requireRole } from '../middleware/rbac.middleware'
-import { createClient } from '@supabase/supabase-js'
 import {
-  getStudentCertificates,
+  IssueCertificateSchema,
+  RequestCertificateSchema,
+  validate,
+  validateParams,
+} from '../middleware/validate'
+import { createClient } from '@supabase/supabase-js'
+import { auditLog } from '../middleware/mfa.middleware'
+import {
+  canUserAccessCertificate,
   getAllCertificates,
+  getStudentCertificates,
   issueCertificate,
+  requestStudentCertificate,
   streamCertificatePdf,
+  verifyCertificate,
 } from '../services/certificates.service'
 
 const supabase = createClient(
@@ -16,12 +26,17 @@ const supabase = createClient(
 
 export const certificatesRouter = Router()
 
-// ─── Étudiant ─────────────────────────────────────────────────────────────────
+certificatesRouter.get('/verify/:token',
+  async (req, res) => {
+    try {
+      const result = await verifyCertificate(req.params.token!)
+      return res.json({ data: result })
+    } catch (err) {
+      return res.status(500).json({ error: (err as Error).message })
+    }
+  },
+)
 
-/**
- * GET /api/certificates/me
- * Certificats de l'étudiant connecté
- */
 certificatesRouter.get('/me',
   authMiddleware,
   requireRole('student'),
@@ -35,34 +50,30 @@ certificatesRouter.get('/me',
   },
 )
 
-/**
- * GET /api/certificates/:id/pdf
- * Télécharger un certificat en PDF (accessible étudiant + admin)
- */
-certificatesRouter.get('/:id/pdf',
+certificatesRouter.post('/request',
   authMiddleware,
+  requireRole('student'),
+  auditLog('CERTIFICATE_REQUEST'),
+  validate(RequestCertificateSchema),
   async (req: AuthenticatedRequest, res) => {
     try {
-      // Vérifier que l'étudiant est bien propriétaire OU que c'est un admin/secretary
-      if (req.user!.role === 'student') {
-        const { data: student } = await supabase
-          .from('students')
-          .select('id')
-          .eq('user_id', req.user!.id)
-          .single()
+      const { type } = req.body as { type: string }
+      const cert = await requestStudentCertificate(req.user!.id, type)
+      return res.status(201).json({ data: cert })
+    } catch (err) {
+      return res.status(400).json({ error: (err as Error).message })
+    }
+  },
+)
 
-        if (student) {
-          const { data: cert } = await supabase
-            .from('certificates')
-            .select('student_id')
-            .eq('id', req.params.id!)
-            .single()
-
-          if (!cert || cert.student_id !== student.id) {
-            return res.status(403).json({ error: 'Accès refusé' })
-          }
-        }
-      }
+certificatesRouter.get('/:id/pdf',
+  authMiddleware,
+  auditLog('CERTIFICATE_PDF_DOWNLOAD'),
+  validateParams('id'),
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const allowed = await canUserAccessCertificate(req.params.id!, req.user!)
+      if (!allowed) return res.status(403).json({ error: 'Acces refuse' })
 
       await streamCertificatePdf(req.params.id!, res)
       return
@@ -75,12 +86,6 @@ certificatesRouter.get('/:id/pdf',
   },
 )
 
-// ─── Admin / Secrétaire ───────────────────────────────────────────────────────
-
-/**
- * GET /api/certificates
- * Tous les certificats émis
- */
 certificatesRouter.get('/',
   authMiddleware,
   requireRole('admin', 'secretary'),
@@ -97,33 +102,25 @@ certificatesRouter.get('/',
   },
 )
 
-/**
- * POST /api/certificates
- * Émettre un certificat pour un étudiant
- */
 certificatesRouter.post('/',
   authMiddleware,
   requireRole('admin', 'secretary'),
+  auditLog('CERTIFICATE_ISSUE'),
+  validate(IssueCertificateSchema),
   async (req: AuthenticatedRequest, res) => {
     try {
       const { studentId, type, expiresAt } = req.body as {
-        studentId:  string
-        type:       string
+        studentId: string
+        type: string
         expiresAt?: string
       }
 
-      if (!studentId || !type) {
-        return res.status(400).json({ error: 'studentId et type sont requis' })
-      }
-
-      // Récupérer l'ID secretary depuis le user connecté
       const { data: secretary } = await supabase
         .from('secretaries')
         .select('id')
         .eq('user_id', req.user!.id)
         .maybeSingle()
 
-      // Fallback : utiliser un secrétaire existant si le user est admin sans profil secretary
       let secretaryId = secretary?.id
       if (!secretaryId) {
         const { data: anySecretary } = await supabase
@@ -135,7 +132,7 @@ certificatesRouter.post('/',
       }
 
       if (!secretaryId) {
-        return res.status(400).json({ error: 'Aucun secrétaire trouvé pour émettre le certificat' })
+        return res.status(400).json({ error: 'Aucun secretaire trouve pour emettre le certificat' })
       }
 
       const certInput: Parameters<typeof issueCertificate>[0] = {

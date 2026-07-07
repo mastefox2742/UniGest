@@ -54,6 +54,11 @@ const NAV: Array<{ section: string; items: NavItem[] }> = [
   ]},
   { section: 'Statistiques', items: [
     { href: '/admin/reports', label: 'Reporting Ministère', Icon: IconBarChart },
+    { href: '/admin/internships', label: 'Stages & Tirocini', Icon: IconBuilding },
+    { href: '/admin/alumni', label: 'Alumni & Placement', Icon: IconUsers },
+  ]},
+  { section: 'Systeme', items: [
+    { href: '/admin/audit', label: "Journal d'audit", Icon: IconShield },
   ]},
 ]
 

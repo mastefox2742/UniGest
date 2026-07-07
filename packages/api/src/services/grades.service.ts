@@ -1,5 +1,12 @@
 import { createClient } from '@supabase/supabase-js'
 import { getTeacherIdByUserId } from './courses.service'
+import {
+  assertGradeCanBeEdited,
+  assertGradeInputIsValid,
+  assertVerbaleCanBePublished,
+  type BookingGradeStateForRules,
+} from './grade-rules'
+import { createScenarioNotificationForStudent } from './notifications.service'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -7,6 +14,7 @@ const supabase = createClient(
 )
 
 export interface ProposeGradeInput {
+  examSessionId: string
   bookingId:  string
   value:      number   // 18-30
   isHonors:   boolean  // true = 30L (value doit être 30)
@@ -61,6 +69,7 @@ export async function getVerbale(examSessionId: string) {
 export async function proposeGrade(teacherUserId: string, input: ProposeGradeInput) {
   const teacherId = await getTeacherIdByUserId(teacherUserId)
   if (!teacherId) throw new Error('Enseignant introuvable')
+  assertGradeInputIsValid({ value: input.value, isHonors: input.isHonors })
 
   // Validation de la note
   if (!input.isHonors && (input.value < 18 || input.value > 30)) {
@@ -89,14 +98,19 @@ export async function proposeGrade(teacherUserId: string, input: ProposeGradeInp
   if (!examSession) throw new Error('Session introuvable')
 
   const course = examSession.courses as any
+  if (booking.exam_session_id !== input.examSessionId) {
+    throw new Error('La prenotation ne correspond pas a cette session')
+  }
   if (course.teacher_id !== teacherId) throw new Error('Non autorisé')
 
   // Créer ou mettre à jour la note
   const { data: existing } = await supabase
     .from('grades')
-    .select('id')
+    .select('id, status')
     .eq('exam_booking_id', input.bookingId)
     .maybeSingle()
+
+  assertGradeCanBeEdited(existing?.status)
 
   const gradePayload = {
     student_id:      booking.student_id,
@@ -137,6 +151,13 @@ export async function proposeGrade(teacherUserId: string, input: ProposeGradeInp
     .update({ status: 'graded' })
     .eq('id', input.bookingId)
 
+  await createScenarioNotificationForStudent(booking.student_id, {
+    topic: 'grade',
+    event: 'status',
+    message: 'Une nouvelle note est en attente de votre reponse.',
+    link: '/student/exams',
+  }).catch(err => console.error('[notifications] grade proposed:', err.message))
+
   return grade
 }
 
@@ -156,18 +177,41 @@ export async function publishVerbale(examSessionId: string, teacherUserId: strin
     .eq('id', examSessionId)
     .single()
 
+  const { data: bookings, error: bookingsError } = await supabase
+    .from('exam_bookings')
+    .select(`
+      id, status,
+      grades!exam_booking_id(status)
+    `)
+    .eq('exam_session_id', examSessionId)
+
+  if (bookingsError) throw new Error(bookingsError.message)
+
+  assertVerbaleCanBePublished(((bookings ?? []) as any[]).map((booking): BookingGradeStateForRules => ({
+    bookingId:     booking.id,
+    bookingStatus: booking.status,
+    gradeStatus:   booking.grades?.[0]?.status ?? null,
+  })))
+
   const course = (session?.courses as any)
   if (!session || course?.teacher_id !== teacherId) throw new Error('Non autorisé')
 
   // Passer toutes les notes 'proposed' → 'published'
   const now = new Date().toISOString()
+  const { data: affectedGrades } = await supabase
+    .from('grades')
+    .select('student_id')
+    .eq('exam_session_id', examSessionId)
+    .in('status', ['proposed', 'accepted'])
   const { error } = await supabase
     .from('grades')
     .update({ status: 'published', published_at: now })
     .eq('exam_session_id', examSessionId)
-    .eq('status', 'proposed')
+    .in('status', ['proposed', 'accepted'])
 
   if (error) throw new Error(error.message)
+
+  await notifyPublishedGrades(affectedGrades ?? null)
 
   return { message: 'Verbale publié avec succès' }
 }
@@ -176,6 +220,17 @@ export async function publishVerbale(examSessionId: string, teacherUserId: strin
  * POST /api/students/me/grades/:gradeId/accept
  * L'étudiant accepte la note proposée
  */
+async function notifyPublishedGrades(affectedGrades: Array<{ student_id: string }> | null) {
+  for (const grade of affectedGrades ?? []) {
+    await createScenarioNotificationForStudent(grade.student_id, {
+      topic: 'grade',
+      event: 'status',
+      message: 'Une note a ete publiee dans votre libretto.',
+      link: '/student/libretto',
+    }).catch(err => console.error('[notifications] grade published:', err.message))
+  }
+}
+
 export async function acceptGrade(gradeId: string, studentUserId: string) {
   // Récupérer l'étudiant
   const { data: student } = await supabase

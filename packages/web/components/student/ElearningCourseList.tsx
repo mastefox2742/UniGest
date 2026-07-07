@@ -42,6 +42,8 @@ export function ElearningCourseList() {
         const profile  = teacher?.profiles as any
         const sections = (ec.elearning_sections as any[]) ?? []
         const materials = (ec.elearning_materials as any[]) ?? []
+        const progress = ec.progress_summary as { completed?: number; total?: number; progressPct?: number } | undefined
+        const progressPct = progress?.progressPct ?? 0
 
         return (
           <Link
@@ -77,6 +79,20 @@ export function ElearningCourseList() {
             <div className="mt-3 flex items-center gap-3 text-xs text-muted-foreground">
               <span>📂 {sections.length} section(s)</span>
               <span>📎 {materials.length} matériaux</span>
+            </div>
+            <div className="mt-4 space-y-1">
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>Progression</span>
+                <span>{progressPct}%</span>
+              </div>
+              <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                <div className="h-full rounded-full bg-primary" style={{ width: `${progressPct}%` }} />
+              </div>
+              {progress ? (
+                <p className="text-right text-[10px] text-muted-foreground">
+                  {progress.completed ?? 0}/{progress.total ?? 0} termines
+                </p>
+              ) : null}
             </div>
           </Link>
         )

@@ -1,6 +1,6 @@
 'use client'
 
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? ''
@@ -37,4 +37,50 @@ export function useStudentCertificates() {
     },
     staleTime: 1000 * 60 * 5,
   })
+}
+
+export function useRequestCertificate() {
+  const qc = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (type: 'enrollment' | 'transcript' | 'degree' | 'attendance' | 'other') => {
+      const token = await getToken()
+      if (!token) throw new Error('Non authentifie')
+
+      const res = await fetch(`${API}/api/certificates/request`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ type }),
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error ?? 'Demande impossible')
+      }
+      return res.json()
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['student-certificates'] }),
+  })
+}
+
+export async function downloadCertificatePdf(certId: string, fileName: string) {
+  const token = await getToken()
+  if (!token) throw new Error('Non authentifie')
+
+  const res = await fetch(`${API}/api/certificates/${certId}/pdf`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) {
+    const err = await res.json()
+    throw new Error(err.error ?? 'Telechargement impossible')
+  }
+
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = fileName
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
 }

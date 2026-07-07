@@ -37,6 +37,8 @@ const NAV_SECTIONS = [
   {
     title: 'Fin de parcours',
     items: [
+      { href: '/student/internships', icon: 'ST', label: 'Stages' },
+      { href: '/student/alumni', icon: 'AL', label: 'Alumni' },
       { href: '/student/thesis', icon: '🎓', label: 'Thèse de Laurea' },
     ],
   },

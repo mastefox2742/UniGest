@@ -191,6 +191,8 @@ export default function DashboardScreen() {
             <QuickAction emoji="📝" label="Examens"      onPress={() => router.push('/(student)/exams')} />
             <QuickAction emoji="🗓️" label="Planning"    onPress={() => router.push('/(student)/schedule')} />
             <QuickAction emoji="💶" label="Frais"        onPress={() => router.push('/(student)/fees')} />
+            <QuickAction emoji="ST" label="Stages"      onPress={() => router.push('/(student)/internships' as Parameters<typeof router.push>[0])} />
+            <QuickAction emoji="AL" label="Alumni"      onPress={() => router.push('/(student)/alumni' as Parameters<typeof router.push>[0])} />
             <QuickAction emoji="📖" label="Ma thèse"     onPress={() => router.push('/(student)/thesis' as Parameters<typeof router.push>[0])} />
             <QuickAction emoji="🔔" label="Notifications" onPress={() => router.push('/(student)/notifications')} />
             <QuickAction emoji="👤" label="Mon profil"  onPress={() => router.push('/(student)/profile')} />

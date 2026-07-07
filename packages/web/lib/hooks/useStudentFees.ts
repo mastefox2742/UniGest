@@ -1,6 +1,6 @@
 'use client'
 
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? ''
@@ -46,5 +46,43 @@ export function useStudentFees() {
       return json.data
     },
     staleTime: 1000 * 60,
+  })
+}
+
+export function usePayStudentFee() {
+  const qc = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({
+      feeId,
+      paymentRef,
+      method,
+      amount,
+    }: {
+      feeId: string
+      paymentRef: string
+      method: 'pagopa' | 'bank_transfer' | 'card' | 'cash' | 'check' | 'online' | 'mobile_money'
+      amount: number
+    }) => {
+      const token = await getToken()
+      if (!token) throw new Error('Non authentifie')
+
+      const res = await fetch(`${API}/api/fees/${feeId}/self-pay`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ paymentRef, method, amount }),
+      })
+
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error ?? 'Paiement impossible')
+      }
+
+      return res.json()
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['student-fees'] })
+      qc.invalidateQueries({ queryKey: ['student-dashboard'] })
+    },
   })
 }

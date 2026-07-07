@@ -3,7 +3,7 @@ import {
   ActivityIndicator, RefreshControl,
 } from 'react-native'
 import { useEffect, useState } from 'react'
-import { apiFetch } from '@/lib/api'
+import { cachedApiFetch } from '@/lib/offlineCache'
 
 type FeesSummary = {
   fees:    Fee[]
@@ -34,11 +34,13 @@ export default function FeesScreen() {
   const [data, setData]         = useState<FeesSummary | null>(null)
   const [loading, setLoading]   = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [offlineNotice, setOfflineNotice] = useState<string | null>(null)
 
   async function loadData() {
     try {
-      const result = await apiFetch<FeesSummary>('/api/fees/me')
-      setData(result)
+      const result = await cachedApiFetch<FeesSummary>('student:fees', '/api/fees/me')
+      setData(result.data)
+      setOfflineNotice(result.fromCache ? `Mode hors ligne - donnees du ${formatDateTime(result.updatedAt)}` : null)
     } catch (err) {
       console.error(err)
     } finally {
@@ -120,6 +122,12 @@ export default function FeesScreen() {
             </View>
           )}
 
+          {offlineNotice && (
+            <View style={styles.offlineBox}>
+              <Text style={styles.offlineText}>{offlineNotice}</Text>
+            </View>
+          )}
+
           {/* Alerte retard */}
           {data && data.overdue > 0 && (
             <View style={styles.alert}>
@@ -152,6 +160,11 @@ export default function FeesScreen() {
       )}
     </View>
   )
+}
+
+function formatDateTime(value: string | null) {
+  if (!value) return 'cache local'
+  return new Date(value).toLocaleString('fr-FR')
 }
 
 function SumCard({
@@ -204,6 +217,16 @@ const styles = StyleSheet.create({
     padding:          12,
   },
   alertText: { fontSize: 13, color: '#991b1b', lineHeight: 18 },
+  offlineBox: {
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    borderRadius: 12,
+    marginHorizontal: 20,
+    marginBottom: 12,
+    padding: 12,
+  },
+  offlineText: { fontSize: 13, color: '#1e40af', lineHeight: 18 },
 
   list: { padding: 16, gap: 10 },
 

@@ -3,98 +3,107 @@ import {
   ActivityIndicator, RefreshControl,
 } from 'react-native'
 import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabase'
+import { cachedApiFetch } from '@/lib/offlineCache'
+import { colors, radius, shadow, spacing, typography } from '@/lib/theme'
 
-type Grade = {
-  id:           string
-  value:        number | null
-  is_honors:    boolean
-  status:       string
-  published_at: string | null
-  exam_sessions: {
-    date: string
-    courses: { name: string; code: string; cfu: number }
-  }
+type LibrettoEntry = {
+  id: string
+  courseCode: string
+  courseName: string
+  cfu: number
+  courseYear: number
+  semester: number
+  grade: string
+  gradeStatus: string
+  publishedAt: string | null
+  examDate: string | null
+  teacherName: string
 }
 
-function gradeColor(g: number) {
-  if (g === 30) return '#f59e0b'
-  if (g >= 27)  return '#10b981'
-  if (g >= 24)  return '#6366f1'
-  return '#f97316'
+type StudentCareer = {
+  student: {
+    matricola: string | null
+    fullName: string
+    status: string
+    currentYear: number
+    degreeProgram: string
+    degreeType: string
+    totalCfu: number
+  }
+  summary: {
+    passedExams: number
+    totalCfuEarned: number
+    totalCfu: number
+    cfuProgressPct: number
+    arithmeticMean: number
+    weightedMean: number
+    laureaStartScore: number
+  }
+  libretto: LibrettoEntry[]
+}
+
+function gradeColor(grade: string) {
+  if (grade === '30L') return colors.gradeExcellent
+  const value = Number(grade)
+  if (value >= 27) return colors.gradeGood
+  if (value >= 24) return colors.gradeOk
+  return colors.gradeLow
+}
+
+function formatDate(value: string | null) {
+  if (!value) return 'Date a confirmer'
+  return new Date(value).toLocaleDateString('fr-FR', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  })
 }
 
 export default function LibrettoScreen() {
-  const [grades, setGrades]     = useState<Grade[]>([])
-  const [loading, setLoading]   = useState(true)
+  const [career, setCareer] = useState<StudentCareer | null>(null)
+  const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [cacheInfo, setCacheInfo] = useState<{ fromCache: boolean; updatedAt: string | null } | null>(null)
 
-  async function loadGrades() {
+  async function loadCareer() {
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) return
-
-      const { data: student } = await supabase
-        .from('students')
-        .select('id')
-        .eq('user_id', session.user.id)
-        .single()
-
-      if (!student) return
-
-      const { data } = await supabase
-        .from('grades')
-        .select(`
-          id, value, is_honors, status, published_at,
-          exam_sessions!exam_session_id(
-            date,
-            courses!course_id(name, code, cfu)
-          )
-        `)
-        .eq('student_id', student.id)
-        .in('status', ['accepted', 'published'])
-        .order('published_at', { ascending: false })
-
-      setGrades((data ?? []) as any)
+      setError(null)
+      const result = await cachedApiFetch<StudentCareer>('student:career', '/api/students/me/career')
+      setCareer(result.data ?? null)
+      setCacheInfo({ fromCache: result.fromCache, updatedAt: result.updatedAt })
+      if (result.fromCache) setError(`Mode hors ligne - donnees du ${formatDateTime(result.updatedAt)}`)
     } catch (err) {
-      console.error(err)
+      setError(err instanceof Error ? err.message : 'Chargement impossible')
     } finally {
       setLoading(false)
       setRefreshing(false)
     }
   }
 
-  useEffect(() => { loadGrades() }, [])
+  useEffect(() => { loadCareer() }, [])
 
-  const accepted    = grades.filter(g => ['accepted', 'published'].includes(g.status) && g.value !== null)
-  const totalCfu    = accepted.reduce((s, g) => s + ((g.exam_sessions as any)?.courses?.cfu ?? 0), 0)
-  const avg         = accepted.length > 0
-    ? accepted.reduce((s, g) => s + (g.value ?? 0), 0) / accepted.length
-    : 0
+  const entries = career?.libretto ?? []
+  const summary = career?.summary
+  const cfuPct = summary?.cfuProgressPct ?? 0
 
-  const renderItem = ({ item }: { item: Grade }) => {
-    const session = item.exam_sessions as any
-    const course  = session?.courses
-    const color   = item.value !== null ? gradeColor(item.value) : '#9ca3af'
+  const renderItem = ({ item }: { item: LibrettoEntry }) => {
+    const color = gradeColor(item.grade)
 
     return (
       <View style={styles.card}>
         <View style={styles.cardMain}>
           <View style={styles.cardInfo}>
-            <Text style={styles.courseName} numberOfLines={2}>{course?.name ?? '—'}</Text>
-            <Text style={styles.courseCode}>{course?.code} • {course?.cfu} CFU</Text>
-            {item.published_at && (
-              <Text style={styles.date}>
-                {new Date(item.published_at).toLocaleDateString('fr-FR')}
-              </Text>
-            )}
+            <Text style={styles.courseName} numberOfLines={2}>{item.courseName}</Text>
+            <Text style={styles.courseCode}>
+              {item.courseCode} - {item.cfu} CFU - An {item.courseYear}, Sem. {item.semester}
+            </Text>
+            <Text style={styles.teacher} numberOfLines={1}>{item.teacherName}</Text>
+            <Text style={styles.date}>{formatDate(item.examDate ?? item.publishedAt)}</Text>
           </View>
           <View style={[styles.gradeBox, { borderColor: color }]}>
-            <Text style={[styles.grade, { color }]}>
-              {item.value ?? '—'}
-              {item.is_honors ? 'L' : ''}
-            </Text>
-            {item.is_honors && <Text style={styles.honorsLabel}>Honours</Text>}
+            <Text style={[styles.grade, { color }]}>{item.grade}</Text>
+            {item.grade === '30L' && <Text style={styles.honorsLabel}>Lode</Text>}
           </View>
         </View>
       </View>
@@ -104,43 +113,85 @@ export default function LibrettoScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>📋 Libretto</Text>
+        <Text style={styles.title}>Libretto</Text>
+        <Text style={styles.subtitle}>
+          {career?.student.degreeProgram ?? 'Carriere etudiante'}
+        </Text>
       </View>
 
       {loading ? (
         <View style={styles.center}>
-          <ActivityIndicator size="large" color="#6366f1" />
+          <ActivityIndicator size="large" color={colors.primary} />
         </View>
       ) : (
-        <>
-          {/* Résumé */}
-          {accepted.length > 0 && (
-            <View style={styles.summary}>
-              <SumStat label="Examens" value={accepted.length.toString()} />
-              <SumStat label="CFU" value={totalCfu.toString()} />
-              <SumStat label="Moyenne" value={avg.toFixed(2)} />
-            </View>
-          )}
+        <FlatList
+          data={entries}
+          keyExtractor={item => item.id}
+          renderItem={renderItem}
+          contentContainerStyle={styles.list}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => { setRefreshing(true); loadCareer() }}
+              colors={[colors.primary]}
+            />
+          }
+          ListHeaderComponent={
+            <View>
+              {error && (
+                <View style={styles.errorBox}>
+                  <Text style={styles.errorText}>{error}</Text>
+                </View>
+              )}
+              {cacheInfo?.fromCache && (
+                <View style={styles.cacheBox}>
+                  <Text style={styles.cacheText}>Copie locale affichee. Tirez pour reessayer la synchronisation.</Text>
+                </View>
+              )}
 
-          <FlatList
-            data={grades}
-            keyExtractor={item => item.id}
-            renderItem={renderItem}
-            contentContainerStyle={styles.list}
-            refreshControl={
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={() => { setRefreshing(true); loadGrades() }}
-                colors={['#6366f1']}
-              />
-            }
-            ListEmptyComponent={
-              <View style={styles.center}>
-                <Text style={styles.emptyText}>Aucun examen enregistré.</Text>
-              </View>
-            }
-          />
-        </>
+              {summary && (
+                <View style={styles.summary}>
+                  <View style={styles.summaryTop}>
+                    <View>
+                      <Text style={styles.studentName}>{career?.student.fullName}</Text>
+                      <Text style={styles.studentMeta}>
+                        {career?.student.matricola ?? 'Matricola'} - Annee {career?.student.currentYear}
+                      </Text>
+                    </View>
+                    <View style={styles.statusPill}>
+                      <Text style={styles.statusText}>{career?.student.status}</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.cfuBlock}>
+                    <View style={styles.cfuHeader}>
+                      <Text style={styles.cfuLabel}>Progression CFU</Text>
+                      <Text style={styles.cfuValue}>
+                        {summary.totalCfuEarned} / {summary.totalCfu}
+                      </Text>
+                    </View>
+                    <View style={styles.progressTrack}>
+                      <View style={[styles.progressFill, { width: `${Math.min(cfuPct, 100)}%` as `${number}%` }]} />
+                    </View>
+                    <Text style={styles.progressPct}>{cfuPct.toFixed(1)}%</Text>
+                  </View>
+
+                  <View style={styles.statsGrid}>
+                    <SumStat label="Examens" value={String(summary.passedExams)} />
+                    <SumStat label="Moy. pond." value={summary.weightedMean > 0 ? summary.weightedMean.toFixed(2) : '-'} />
+                    <SumStat label="Moy. arith." value={summary.arithmeticMean > 0 ? summary.arithmeticMean.toFixed(2) : '-'} />
+                    <SumStat label="Laurea" value={summary.laureaStartScore > 0 ? summary.laureaStartScore.toFixed(1) : '-'} />
+                  </View>
+                </View>
+              )}
+            </View>
+          }
+          ListEmptyComponent={
+            <View style={styles.center}>
+              <Text style={styles.emptyText}>Aucune note publiee dans le libretto.</Text>
+            </View>
+          }
+        />
       )}
     </View>
   )
@@ -155,58 +206,116 @@ function SumStat({ label, value }: { label: string; value: string }) {
   )
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f9fafb' },
-  header:    { paddingTop: 56, paddingHorizontal: 20, paddingBottom: 12, backgroundColor: '#f9fafb' },
-  title:     { fontSize: 24, fontWeight: '800', color: '#111827' },
+function formatDateTime(value: string | null) {
+  if (!value) return 'derniere synchronisation inconnue'
+  return new Date(value).toLocaleString('fr-FR')
+}
 
-  center:    { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 60 },
-  emptyText: { color: '#9ca3af', fontSize: 14 },
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.background },
+  header: {
+    paddingTop: 56,
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.md,
+    backgroundColor: colors.background,
+  },
+  title: { ...typography['2xl'], fontWeight: '800', color: colors.text },
+  subtitle: { ...typography.sm, color: colors.textSecond, marginTop: 2 },
+
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 60 },
+  emptyText: { ...typography.base, color: colors.textMuted, textAlign: 'center' },
+
+  list: { padding: spacing.xl, paddingTop: spacing.sm, gap: spacing.md },
+
+  errorBox: {
+    backgroundColor: colors.errorBg,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  errorText: { ...typography.sm, color: colors.errorDark },
+  cacheBox: {
+    backgroundColor: colors.infoBg,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  cacheText: { ...typography.sm, color: colors.infoDark },
 
   summary: {
-    flexDirection:  'row',
-    justifyContent: 'space-around',
-    backgroundColor: '#fff',
-    marginHorizontal: 20,
-    marginBottom:    12,
-    borderRadius:    16,
-    paddingVertical: 16,
-    shadowColor:     '#000',
-    shadowOffset:    { width: 0, height: 1 },
-    shadowOpacity:   0.06,
-    shadowRadius:    4,
-    elevation:       2,
+    backgroundColor: colors.card,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+    ...shadow.sm,
   },
-  sumStat:  { alignItems: 'center' },
-  sumValue: { fontSize: 22, fontWeight: '800', color: '#6366f1' },
-  sumLabel: { fontSize: 11, color: '#9ca3af', marginTop: 2 },
+  summaryTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+  },
+  studentName: { ...typography.md, fontWeight: '800', color: colors.text },
+  studentMeta: { ...typography.xs, color: colors.textSecond, marginTop: 2 },
+  statusPill: {
+    backgroundColor: colors.primaryLight,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  statusText: { ...typography.xs, color: colors.primaryDark, fontWeight: '700' },
 
-  list: { padding: 20, paddingTop: 8, gap: 10 },
+  cfuBlock: { marginTop: spacing.lg },
+  cfuHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  cfuLabel: { ...typography.sm, color: colors.textSecond, fontWeight: '600' },
+  cfuValue: { ...typography.sm, color: colors.text, fontWeight: '800' },
+  progressTrack: {
+    height: 8,
+    backgroundColor: colors.borderLight,
+    borderRadius: radius.full,
+    marginTop: spacing.sm,
+    overflow: 'hidden',
+  },
+  progressFill: { height: '100%', backgroundColor: colors.primary, borderRadius: radius.full },
+  progressPct: { ...typography.xs, color: colors.primary, fontWeight: '700', marginTop: spacing.xs, textAlign: 'right' },
+
+  statsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    marginTop: spacing.lg,
+  },
+  sumStat: {
+    flexGrow: 1,
+    flexBasis: '45%',
+    backgroundColor: colors.background,
+    borderRadius: radius.md,
+    padding: spacing.md,
+  },
+  sumValue: { ...typography.xl, fontWeight: '800', color: colors.primary },
+  sumLabel: { ...typography.xs, color: colors.textMuted, marginTop: 2 },
 
   card: {
-    backgroundColor: '#fff',
-    borderRadius:    16,
-    padding:         16,
-    shadowColor:     '#000',
-    shadowOffset:    { width: 0, height: 1 },
-    shadowOpacity:   0.06,
-    shadowRadius:    4,
-    elevation:       2,
+    backgroundColor: colors.card,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    ...shadow.sm,
   },
-  cardMain:  { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  cardInfo:  { flex: 1 },
-  courseName:{ fontSize: 14, fontWeight: '700', color: '#111827', lineHeight: 20 },
-  courseCode:{ fontSize: 12, color: '#6b7280', marginTop: 3 },
-  date:      { fontSize: 11, color: '#9ca3af', marginTop: 2 },
+  cardMain: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  cardInfo: { flex: 1 },
+  courseName: { ...typography.base, fontWeight: '800', color: colors.text },
+  courseCode: { ...typography.sm, color: colors.textSecond, marginTop: 3 },
+  teacher: { ...typography.xs, color: colors.textMuted, marginTop: 2 },
+  date: { ...typography.xs, color: colors.textMuted, marginTop: 2 },
 
   gradeBox: {
-    width:        60,
-    height:       60,
-    borderRadius: 12,
-    borderWidth:  2,
-    alignItems:   'center',
+    width: 64,
+    height: 64,
+    borderRadius: radius.md,
+    borderWidth: 2,
+    alignItems: 'center',
     justifyContent: 'center',
   },
-  grade:       { fontSize: 22, fontWeight: '800' },
-  honorsLabel: { fontSize: 9, color: '#f59e0b', fontWeight: '700', marginTop: -2 },
+  grade: { fontSize: 21, fontWeight: '900' },
+  honorsLabel: { ...typography.xs, color: colors.gradeExcellent, fontWeight: '800', marginTop: -2 },
 })

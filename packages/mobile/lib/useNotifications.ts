@@ -4,7 +4,7 @@
  * Ce hook :
  * 1. Demande la permission de notifications à l'utilisateur
  * 2. Récupère le token Expo Push Token
- * 3. Sauvegarde le token dans Supabase (table push_tokens)
+ * 3. Sauvegarde le token via l'API notifications
  * 4. Configure les handlers pour notifications en foreground
  * 5. Configure le handler de tap sur notification (navigation)
  *
@@ -19,7 +19,7 @@ import * as Notifications from 'expo-notifications'
 import * as Device from 'expo-device'
 import Constants from 'expo-constants'
 import { router } from 'expo-router'
-import { supabase } from './supabase'
+import { apiFetch } from './api'
 
 // ─── Configuration globale du comportement des notifications ─────────────────
 // À appeler une seule fois au démarrage de l'app
@@ -52,11 +52,13 @@ export function useNotifications() {
     responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
       const data = response.notification.request.content.data as Record<string, unknown>
 
-      // Navigation basée sur le type de notification
+      const topic = typeof data?.topic === 'string' ? data.topic : data?.type
+
+      // Navigation basée sur le sujet de notification
       if (data?.route) {
         router.push(data.route as Parameters<typeof router.push>[0])
-      } else if (data?.type) {
-        switch (data.type) {
+      } else if (topic) {
+        switch (topic) {
           case 'exam':
             router.push('/(student)/exams')
             break
@@ -66,8 +68,23 @@ export function useNotifications() {
           case 'grade':
             router.push('/(student)/libretto')
             break
+          case 'certificate':
+            router.push('/(student)/certificates' as Parameters<typeof router.push>[0])
+            break
           case 'thesis':
             router.push('/(student)/thesis' as Parameters<typeof router.push>[0])
+            break
+          case 'graduation':
+            router.push('/(student)/thesis' as Parameters<typeof router.push>[0])
+            break
+          case 'elearning':
+            router.push('/(student)/courses' as Parameters<typeof router.push>[0])
+            break
+          case 'internship':
+            router.push('/(student)/internships' as Parameters<typeof router.push>[0])
+            break
+          case 'alumni':
+            router.push('/(student)/alumni' as Parameters<typeof router.push>[0])
             break
           default:
             router.push('/(student)/notifications')
@@ -138,9 +155,7 @@ async function registerForPushNotifications(): Promise<string | null> {
 
   try {
     // Récupère le token Expo (format : ExponentPushToken[xxxx])
-    const projectId =
-      Constants.expoConfig?.extra?.eas?.projectId ??
-      Constants.easConfig?.projectId
+    const projectId = getExpoProjectId()
 
     if (!projectId) {
       console.warn('[Push] projectId manquant dans app.json — push désactivé en dev')
@@ -152,7 +167,7 @@ async function registerForPushNotifications(): Promise<string | null> {
 
     console.log('[Push] Token obtenu:', token.substring(0, 30) + '…')
 
-    // Sauvegarde dans Supabase
+    // Sauvegarde via l'API
     await savePushToken(token)
 
     return token
@@ -163,43 +178,40 @@ async function registerForPushNotifications(): Promise<string | null> {
 }
 
 async function savePushToken(token: string): Promise<void> {
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) return
-
   const platform = Platform.OS as 'ios' | 'android' | 'web'
 
-  const { error } = await supabase.rpc('upsert_push_token', {
-    p_user_id:   session.user.id,
-    p_token:     token,
-    p_platform:  platform,
-    p_device_id: null,
-  })
-
-  if (error) {
-    console.error('[Push] Erreur sauvegarde token:', error.message)
-  } else {
+  try {
+    await apiFetch('/api/notifications/push-token', {
+      method: 'POST',
+      body: JSON.stringify({ token, platform }),
+    })
     console.log('[Push] Token sauvegardé en base')
+  } catch (err) {
+    console.error('[Push] Erreur sauvegarde token:', err)
   }
 }
 
 // ─── Désactiver le token au logout ───────────────────────────────────────────
 
 export async function deregisterPushToken(): Promise<void> {
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) return
-
   try {
-    const tokenData = await Notifications.getExpoPushTokenAsync()
+    const projectId = getExpoProjectId()
+    if (!projectId) return
+
+    const tokenData = await Notifications.getExpoPushTokenAsync({ projectId })
     const token     = tokenData.data
 
-    await supabase
-      .from('push_tokens')
-      .update({ is_active: false })
-      .eq('user_id', session.user.id)
-      .eq('token', token)
+    await apiFetch('/api/notifications/push-token', {
+      method: 'DELETE',
+      body: JSON.stringify({ token }),
+    })
   } catch {
     // Silencieux — pas critique si ça échoue
   }
+}
+
+function getExpoProjectId(): string | null {
+  return Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId ?? null
 }
 
 // ─── Utilitaire : envoyer une notification locale (test / rappel) ─────────────

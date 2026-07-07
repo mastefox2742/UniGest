@@ -115,12 +115,51 @@ export interface ExamSession extends BaseEntity {
   course?: Course
 }
 
+export interface ExamSessionSummary {
+  id: string
+  courseId: string
+  courseName: string
+  courseCode: string
+  cfu: number
+  date: string
+  registrationDeadline: string
+  classroom?: {
+    name: string
+    building?: string | null
+  } | null
+  maxStudents?: number | null
+  bookedCount: number
+  seatsAvailable?: number | null
+  isBooked?: boolean
+  notes?: string | null
+}
+
 export interface ExamBooking extends BaseEntity {
   studentId: string
   examSessionId: string
   status: ExamBookingStatus
   student?: Student
   examSession?: ExamSession
+}
+
+export interface ExamBookingSummary {
+  id: string
+  examSessionId: string
+  status: ExamBookingStatus
+  bookedAt: string
+  exam: ExamSessionSummary
+}
+
+export interface CreateExamSessionInput {
+  date: string
+  registrationDeadline: string
+  classroomId?: string
+  maxStudents?: number
+  notes?: string
+}
+
+export interface BookExamResponse {
+  booking: ExamBookingSummary
 }
 
 export interface Grade extends BaseEntity {
@@ -134,6 +173,53 @@ export interface Grade extends BaseEntity {
   publishedAt?: string
   student?: Student
   course?: Course
+}
+
+export interface VerbaleGradeEntry {
+  id: string
+  value: number | null
+  isHonors: boolean
+  status: GradeStatus
+  notes?: string | null
+  acceptedAt?: string | null
+  rejectedAt?: string | null
+  publishedAt?: string | null
+}
+
+export interface VerbaleBookingEntry {
+  id: string
+  status: ExamBookingStatus
+  bookedAt: string
+  student: {
+    id: string
+    matricola?: string | null
+    firstName?: string | null
+    lastName?: string | null
+    email?: string | null
+  }
+  grades: VerbaleGradeEntry[]
+}
+
+export interface VerbaleDetail {
+  session: {
+    id: string
+    date: string
+    notes?: string | null
+    course: {
+      id: string
+      name: string
+      code: string
+      cfu: number
+    }
+  }
+  bookings: VerbaleBookingEntry[]
+}
+
+export interface ProposeGradeInput {
+  bookingId: string
+  value: number
+  isHonors: boolean
+  notes?: string
 }
 
 export interface StudyPlan extends BaseEntity {
@@ -209,4 +295,48 @@ export interface StudentDashboard {
   recentGrades: Grade[]
   pendingFees: TuitionFee[]
   cfuProgress: { earned: number; total: number; percentage: number }
+}
+
+export interface LibrettoEntryDto {
+  id: string
+  matricola?: string
+  studentName?: string
+  degreeProgram?: string
+  degreeType?: string
+  courseCode: string
+  courseName: string
+  cfu: number
+  courseYear: number
+  semester: number
+  grade: string
+  gradeStatus: string
+  publishedAt: string | null
+  examDate: string | null
+  teacherName: string
+}
+
+export interface StudentCareerSummaryDto {
+  passedExams: number
+  totalCfuEarned: number
+  totalCfu: number
+  cfuProgressPct: number
+  arithmeticMean: number
+  weightedMean: number
+  laureaStartScore: number
+}
+
+export interface StudentCareerDto {
+  student: {
+    id: string
+    matricola: string | null
+    fullName: string
+    status: string
+    currentYear: number
+    enrollmentYear: number
+    degreeProgram: string
+    degreeType: string
+    totalCfu: number
+  }
+  summary: StudentCareerSummaryDto
+  libretto: LibrettoEntryDto[]
 }

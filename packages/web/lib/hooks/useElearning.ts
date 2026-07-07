@@ -128,6 +128,18 @@ export function useGradeSubmission() {
   })
 }
 
+export function useCreateElearningAnnouncement(ecId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: { title: string; body: string; isPinned?: boolean }) =>
+      apiFetch(`/api/elearning/courses/${ecId}/announcements`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['elearning-teacher'] }),
+  })
+}
+
 // ─── Vue étudiant ─────────────────────────────────────────────────────────────
 
 export function useStudentElearningCourses() {

@@ -126,6 +126,34 @@ export function useCreateExamSession(courseId: string) {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['course', courseId] })
+      qc.invalidateQueries({ queryKey: ['teacher-courses'] })
     },
+  })
+}
+
+export function useExamBookings(examId: string | null) {
+  const supabase = createClient()
+
+  return useQuery({
+    queryKey: ['exam-bookings', examId],
+    enabled: !!examId,
+    queryFn: async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session || !examId) return []
+
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/exams/${examId}/bookings`,
+        { headers: { Authorization: `Bearer ${session.access_token}` } },
+      )
+
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error ?? 'Erreur chargement prenotes')
+      }
+
+      const json = await res.json()
+      return json.data ?? []
+    },
+    staleTime: 1000 * 30,
   })
 }

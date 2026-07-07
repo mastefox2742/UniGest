@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { authMiddleware, type AuthenticatedRequest } from '../middleware/auth.middleware'
 import { requireRole } from '../middleware/rbac.middleware'
+import { ProposeGradeSchema, validate, validateParams } from '../middleware/validate'
 import {
   getVerbale,
   proposeGrade,
@@ -21,6 +22,7 @@ export const gradesRouter = Router()
 gradesRouter.get('/exams/:examId/verbale',
   authMiddleware,
   requireRole('teacher', 'admin'),
+  validateParams('examId'),
   async (req, res) => {
     try {
       const verbale = await getVerbale(req.params.examId!)
@@ -38,6 +40,8 @@ gradesRouter.get('/exams/:examId/verbale',
 gradesRouter.post('/exams/:examId/grades',
   authMiddleware,
   requireRole('teacher'),
+  validateParams('examId'),
+  validate(ProposeGradeSchema),
   async (req: AuthenticatedRequest, res) => {
     try {
       const { bookingId, value, isHonors, notes } = req.body as {
@@ -52,6 +56,7 @@ gradesRouter.post('/exams/:examId/grades',
       }
 
       const gradeInput: Parameters<typeof proposeGrade>[1] = {
+        examSessionId: req.params.examId!,
         bookingId,
         value,
         isHonors: isHonors ?? false,
@@ -73,6 +78,7 @@ gradesRouter.post('/exams/:examId/grades',
 gradesRouter.post('/exams/:examId/publish',
   authMiddleware,
   requireRole('teacher', 'admin'),
+  validateParams('examId'),
   async (req: AuthenticatedRequest, res) => {
     try {
       const result = await publishVerbale(req.params.examId!, req.user!.id)
@@ -109,6 +115,7 @@ gradesRouter.get('/me/pending',
 gradesRouter.post('/:gradeId/accept',
   authMiddleware,
   requireRole('student'),
+  validateParams('gradeId'),
   async (req: AuthenticatedRequest, res) => {
     try {
       const grade = await acceptGrade(req.params.gradeId!, req.user!.id)
@@ -126,6 +133,7 @@ gradesRouter.post('/:gradeId/accept',
 gradesRouter.post('/:gradeId/refuse',
   authMiddleware,
   requireRole('student'),
+  validateParams('gradeId'),
   async (req: AuthenticatedRequest, res) => {
     try {
       await refuseGrade(req.params.gradeId!, req.user!.id)

@@ -3,7 +3,7 @@ import {
   TouchableOpacity, ActivityIndicator, RefreshControl,
 } from 'react-native'
 import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabase'
+import { apiFetch } from '@/lib/api'
 import { colors, spacing, radius, shadow, typography } from '@/lib/theme'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -46,17 +46,8 @@ export default function NotificationsScreen() {
 
   async function loadNotifications() {
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) return
-
-      const { data } = await supabase
-        .from('notifications')
-        .select('id, type, title, message, is_read, created_at')
-        .eq('user_id', session.user.id)
-        .order('created_at', { ascending: false })
-        .limit(50)
-
-      setNotifs((data ?? []) as Notif[])
+      const data = await apiFetch<Notif[]>('/api/notifications?limit=50')
+      setNotifs(data ?? [])
     } catch (err) {
       console.error('[Notifications]', err)
     } finally {
@@ -66,23 +57,13 @@ export default function NotificationsScreen() {
   }
 
   async function markAsRead(id: string) {
-    await supabase
-      .from('notifications')
-      .update({ is_read: true })
-      .eq('id', id)
+    await apiFetch(`/api/notifications/${id}/read`, { method: 'POST' })
 
     setNotifs(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n))
   }
 
   async function markAllRead() {
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) return
-
-    await supabase
-      .from('notifications')
-      .update({ is_read: true })
-      .eq('user_id', session.user.id)
-      .eq('is_read', false)
+    await apiFetch('/api/notifications/read-all', { method: 'POST' })
 
     setNotifs(prev => prev.map(n => ({ ...n, is_read: true })))
   }

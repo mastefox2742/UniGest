@@ -94,6 +94,23 @@ export function useAnnualReport(universityId = 'demo-uni', academicYearId?: stri
   })
 }
 
+export function useOverviewReport() {
+  return useQuery({
+    queryKey: ['admin-overview-report'],
+    queryFn: async () => {
+      if (DEMO) return DEMO_REPORT
+      const token = await getToken()
+      if (!token) return null
+      const res = await fetch(`${API}/api/reports/overview`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) throw new Error('Erreur chargement synthese')
+      return (await res.json()).data
+    },
+    staleTime: 1000 * 60 * 5,
+  })
+}
+
 export function useProgramReport(programId: string | null) {
   return useQuery({
     queryKey: ['admin-program-report', programId],

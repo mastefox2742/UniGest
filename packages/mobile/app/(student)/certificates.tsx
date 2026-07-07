@@ -5,6 +5,7 @@ import {
 } from 'react-native'
 import { useEffect, useState } from 'react'
 import { apiFetch } from '@/lib/api'
+import { cachedApiFetch } from '@/lib/offlineCache'
 import { colors, spacing, radius, shadow, typography } from '@/lib/theme'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -36,11 +37,13 @@ export default function CertificatesScreen() {
   const [loading, setLoading]       = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [requesting, setRequesting] = useState(false)
+  const [offlineNotice, setOfflineNotice] = useState<string | null>(null)
 
   async function loadCertificates() {
     try {
-      const data = await apiFetch<Certificate[]>('/api/certificates/me')
-      setCerts(data ?? [])
+      const result = await cachedApiFetch<Certificate[]>('student:certificates', '/api/certificates/me')
+      setCerts(result.data ?? [])
+      setOfflineNotice(result.fromCache ? `Mode hors ligne - donnees du ${formatDateTime(result.updatedAt)}` : null)
     } catch (err) {
       console.error('[Certificates]', err)
     } finally {
@@ -79,7 +82,7 @@ export default function CertificatesScreen() {
           onPress: async () => {
             setRequesting(true)
             try {
-              await apiFetch('/api/certificates', {
+              await apiFetch('/api/certificates/request', {
                 method: 'POST',
                 body: JSON.stringify({ type }),
               })
@@ -182,6 +185,12 @@ export default function CertificatesScreen() {
           ListHeaderComponent={
             <>
               {/* Compteurs */}
+              {offlineNotice && (
+                <View style={styles.offlineBox}>
+                  <Text style={styles.offlineText}>{offlineNotice}</Text>
+                </View>
+              )}
+
               {certs.length > 0 && (
                 <View style={styles.stats}>
                   <View style={styles.statCard}>
@@ -244,6 +253,11 @@ export default function CertificatesScreen() {
   )
 }
 
+function formatDateTime(value: string | null) {
+  if (!value) return 'cache local'
+  return new Date(value).toLocaleString('fr-FR')
+}
+
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
@@ -261,6 +275,13 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 60 },
 
   list: { padding: spacing.xl, paddingBottom: 32, gap: spacing.md },
+  offlineBox: {
+    backgroundColor: colors.infoBg,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  offlineText: { ...typography.sm, color: colors.infoDark },
 
   stats: {
     flexDirection: 'row',

@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { createScenarioNotificationForStudent } from './notifications.service'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -76,6 +77,12 @@ export async function submitThesis(studentUserId: string, input: {
       .single()
 
     if (error || !data) throw new Error('Impossible de mettre à jour la thèse')
+    await createScenarioNotificationForStudent(student.id, {
+      topic: 'thesis',
+      event: 'submitted',
+      message: 'Votre soumission de these a ete mise a jour.',
+      link: '/student/thesis',
+    }).catch(err => console.error('[notifications] thesis update:', err.message))
     return data
   }
 
@@ -97,6 +104,12 @@ export async function submitThesis(studentUserId: string, input: {
     .single()
 
   if (error || !data) throw new Error('Impossible de soumettre la thèse')
+  await createScenarioNotificationForStudent(student.id, {
+    topic: 'thesis',
+    event: 'submitted',
+    message: 'Votre these a ete soumise au secretariat.',
+    link: '/student/thesis',
+  }).catch(err => console.error('[notifications] thesis submit:', err.message))
   return data
 }
 
@@ -130,6 +143,12 @@ export async function updateThesisStatus(
   notes?:   string,
   defenseDate?: string,
 ) {
+  const { data: thesis } = await supabase
+    .from('theses')
+    .select('student_id')
+    .eq('id', thesisId)
+    .single()
+
   const update: Record<string, unknown> = { status }
   if (notes       !== undefined) update.notes        = notes
   if (defenseDate !== undefined) update.defense_date = defenseDate
@@ -140,4 +159,13 @@ export async function updateThesisStatus(
     .eq('id', thesisId)
 
   if (error) throw new Error(error.message)
+
+  if (thesis?.student_id) {
+    await createScenarioNotificationForStudent(thesis.student_id, {
+      topic: 'thesis',
+      event: 'status',
+      message: `Le statut de votre these est maintenant: ${status}.`,
+      link: '/student/thesis',
+    }).catch(err => console.error('[notifications] thesis status:', err.message))
+  }
 }

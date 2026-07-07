@@ -1,13 +1,29 @@
 import { Router } from 'express'
 import { authMiddleware } from '../middleware/auth.middleware'
 import { requireRole } from '../middleware/rbac.middleware'
+import { auditLog } from '../middleware/mfa.middleware'
 import {
+  getOverviewReport,
   getAnnualReport,
   getProgramReport,
   exportStudentsCsv,
 } from '../services/reports.service'
 
 export const reportsRouter = Router()
+
+/** GET /api/reports/overview */
+reportsRouter.get('/overview',
+  authMiddleware,
+  requireRole('admin', 'secretary'),
+  async (_req, res) => {
+    try {
+      const report = await getOverviewReport()
+      return res.json({ data: report })
+    } catch (err) {
+      return res.status(500).json({ error: (err as Error).message })
+    }
+  },
+)
 
 /** GET /api/reports/annual?universityId=...&academicYearId=... */
 reportsRouter.get('/annual',
@@ -45,6 +61,7 @@ reportsRouter.get('/programs/:id',
 reportsRouter.get('/export/students',
   authMiddleware,
   requireRole('admin', 'secretary'),
+  auditLog('REPORT_STUDENTS_EXPORT'),
   async (req, res) => {
     try {
       const { programId, status } = req.query as { programId?: string; status?: string }

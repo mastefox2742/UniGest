@@ -7,12 +7,101 @@ import {
   useUpsertElearningCourse,
   usePublishElearningCourse,
   useCreateSection,
+  useCreateElearningAnnouncement,
 } from '@/lib/hooks/useElearning'
 import { SectionEditor } from './SectionEditor'
 import { AssignmentsList } from './AssignmentsList'
 import { QuizManager } from './QuizManager'
 
-type Tab = 'content' | 'assignments' | 'quizzes'
+type Tab = 'content' | 'assignments' | 'quizzes' | 'announcements'
+
+function AnnouncementsEditor({ ecId, announcements }: { ecId: string; announcements: any[] }) {
+  const createAnnouncement = useCreateElearningAnnouncement(ecId)
+  const [title, setTitle] = useState('')
+  const [body, setBody] = useState('')
+  const [isPinned, setIsPinned] = useState(false)
+
+  async function handleCreate() {
+    if (!title.trim() || !body.trim()) {
+      toast.error('Titre et message requis')
+      return
+    }
+    try {
+      const payload: { title: string; body: string; isPinned?: boolean } = {
+        title: title.trim(),
+        body: body.trim(),
+      }
+      if (isPinned) payload.isPinned = true
+      await createAnnouncement.mutateAsync(payload)
+      setTitle('')
+      setBody('')
+      setIsPinned(false)
+      toast.success('Annonce publiee')
+    } catch (err) {
+      toast.error((err as Error).message)
+    }
+  }
+
+  const sorted = [...announcements].sort((a, b) => {
+    if (a.is_pinned !== b.is_pinned) return a.is_pinned ? -1 : 1
+    return new Date(b.published_at ?? b.created_at).getTime() - new Date(a.published_at ?? a.created_at).getTime()
+  })
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl border bg-card p-4 space-y-3">
+        <input
+          value={title}
+          onChange={e => setTitle(e.target.value)}
+          placeholder="Titre de l'annonce"
+          className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+        />
+        <textarea
+          value={body}
+          onChange={e => setBody(e.target.value)}
+          placeholder="Message visible par les etudiants"
+          rows={4}
+          className="w-full resize-none rounded-md border bg-background px-3 py-2 text-sm"
+        />
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <label className="flex items-center gap-2 text-sm text-muted-foreground">
+            <input type="checkbox" checked={isPinned} onChange={e => setIsPinned(e.target.checked)} />
+            Epingler l'annonce
+          </label>
+          <button
+            onClick={handleCreate}
+            disabled={createAnnouncement.isPending}
+            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+          >
+            {createAnnouncement.isPending ? 'Publication...' : 'Publier'}
+          </button>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        {sorted.length === 0 ? (
+          <p className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
+            Aucune annonce publiee.
+          </p>
+        ) : null}
+        {sorted.map(announcement => (
+          <article key={announcement.id} className="rounded-xl border bg-card p-4">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <h3 className="font-semibold">{announcement.title}</h3>
+              {announcement.is_pinned ? (
+                <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700">Epinglee</span>
+              ) : null}
+            </div>
+            <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">{announcement.body}</p>
+            <p className="mt-3 text-xs text-muted-foreground">
+              {new Date(announcement.published_at ?? announcement.created_at).toLocaleDateString('fr-FR')}
+            </p>
+          </article>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 export function ElearningEditor({ courseId }: { courseId: string }) {
   const [tab, setTab]                   = useState<Tab>('content')
@@ -90,6 +179,7 @@ export function ElearningEditor({ courseId }: { courseId: string }) {
     { id: 'content',     label: '📚 Contenu' },
     { id: 'assignments', label: '📝 Devoirs' },
     { id: 'quizzes',     label: '🧠 Quiz' },
+    { id: 'announcements', label: 'Annonces' },
   ]
 
   const sections = (ec.elearning_sections as any[]) ?? []
@@ -188,6 +278,9 @@ export function ElearningEditor({ courseId }: { courseId: string }) {
 
       {tab === 'assignments' && <AssignmentsList ecId={ecId!} assignments={(ec.elearning_assignments as any[]) ?? []} />}
       {tab === 'quizzes'     && <QuizManager     ecId={ecId!} quizzes={(ec.elearning_quizzes as any[]) ?? []} />}
+      {tab === 'announcements' && (
+        <AnnouncementsEditor ecId={ecId!} announcements={(ec.elearning_announcements as any[]) ?? []} />
+      )}
     </div>
   )
 }

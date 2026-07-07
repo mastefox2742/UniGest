@@ -5,6 +5,7 @@ import {
 } from 'react-native'
 import { useEffect, useState } from 'react'
 import { apiFetch } from '@/lib/api'
+import { cachedApiFetch } from '@/lib/offlineCache'
 
 type Booking = {
   id:            string
@@ -35,15 +36,18 @@ export default function ExamsScreen() {
   const [loading, setLoading]     = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [acting, setActing]       = useState<string | null>(null)
+  const [offlineNotice, setOfflineNotice] = useState<string | null>(null)
 
   async function loadData() {
     try {
       const [avail, bkgs] = await Promise.all([
-        apiFetch<AvailableExam[]>('/api/exams/available'),
-        apiFetch<Booking[]>('/api/exams/my-bookings'),
+        cachedApiFetch<AvailableExam[]>('student:exams:available', '/api/exams/available'),
+        cachedApiFetch<Booking[]>('student:exams:bookings', '/api/exams/my-bookings'),
       ])
-      setAvailable(avail ?? [])
-      setBookings(bkgs ?? [])
+      setAvailable(avail.data ?? [])
+      setBookings(bkgs.data ?? [])
+      const cachedAt = avail.fromCache ? avail.updatedAt : bkgs.fromCache ? bkgs.updatedAt : null
+      setOfflineNotice(avail.fromCache || bkgs.fromCache ? `Mode hors ligne - donnees du ${formatDateTime(cachedAt)}` : null)
     } catch (err) {
       console.error(err)
     } finally {
@@ -130,6 +134,13 @@ export default function ExamsScreen() {
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadData() }} colors={['#6366f1']} />
           }
+          ListHeaderComponent={
+            offlineNotice ? (
+              <View style={styles.offlineBox}>
+                <Text style={styles.offlineText}>{offlineNotice}</Text>
+              </View>
+            ) : null
+          }
           renderItem={({ item: b }) => {
             const es = b.exam_sessions as any
             const course = es?.courses
@@ -175,6 +186,13 @@ export default function ExamsScreen() {
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadData() }} colors={['#6366f1']} />
           }
+          ListHeaderComponent={
+            offlineNotice ? (
+              <View style={styles.offlineBox}>
+                <Text style={styles.offlineText}>{offlineNotice}</Text>
+              </View>
+            ) : null
+          }
           renderItem={({ item: ex }) => {
             const course = ex.courses as any
             const room   = ex.classrooms as any
@@ -214,6 +232,11 @@ export default function ExamsScreen() {
   )
 }
 
+function formatDateTime(value: string | null) {
+  if (!value) return 'cache local'
+  return new Date(value).toLocaleString('fr-FR')
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f9fafb' },
   header:    { paddingTop: 56, paddingHorizontal: 20, paddingBottom: 4, backgroundColor: '#f9fafb' },
@@ -233,6 +256,15 @@ const styles = StyleSheet.create({
 
   center:    { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 60 },
   emptyText: { color: '#9ca3af', fontSize: 14 },
+  offlineBox: {
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 10,
+  },
+  offlineText: { color: '#1e40af', fontSize: 13 },
 
   list: { padding: 16, gap: 10 },
 

@@ -1,304 +1,274 @@
 'use client'
 
 import { useState } from 'react'
+import { downloadStudentsCsv, useOverviewReport } from '@/lib/hooks/useAdminReports'
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-type ReportSection = 'students' | 'results' | 'finance' | 'teachers'
+type ReportSection = 'students' | 'results' | 'finance' | 'graduation' | 'placement'
 
-// ─── Demo Data ────────────────────────────────────────────────────────────────
-const PASS_RATES = [
-  { program: 'Master Informatique M1',       s1: 82, s2: 78, delta: -4 },
-  { program: 'Master Informatique M2',       s1: 88, s2: 85, delta: -3 },
-  { program: 'Master Sciences des Données M1', s1: 79, s2: 77, delta: -2 },
-  { program: 'Licence Mathématiques L3',     s1: 71, s2: 68, delta: -3 },
-  { program: 'Master Droit International M2', s1: 90, s2: 89, delta: -1 },
-]
+type BreakdownRow = { label: string; count: number; pct: number }
+type TrendRow = { year: string; count: number }
+type ProgramKpi = {
+  total_students?: number
+  retention_rate?: number
+  pass_rate?: number
+  avg_grad_years?: number
+  at_risk_count?: number
+  degree_programs?: { name?: string; code?: string; type?: string } | null
+}
 
-const ENROLLMENT_TREND = [
-  { year: '2022-23', count: 1_084 },
-  { year: '2023-24', count: 1_158 },
-  { year: '2024-25', count: 1_209 },
-  { year: '2025-26', count: 1_247 },
-]
+type OverviewReport = {
+  totalStudents: number
+  activeStudents: number
+  graduated: number
+  withdrawn: number
+  teacherCount: number
+  graduationReady: number
+  diplomasIssued: number
+  avgGpa: number
+  avgGrade: number
+  avgPassRate: number
+  abandonRate: number
+  encadrementRatio: string
+  totalRevenue: number
+  outstandingFees: number
+  paymentCollectionRate: number
+  examPresenceRate: number
+  nationalities: BreakdownRow[]
+  studentStatusBreakdown: BreakdownRow[]
+  enrollmentTrend: TrendRow[]
+  feeBreakdown: BreakdownRow[]
+  graduationBreakdown: BreakdownRow[]
+  placementSurveyCount: number
+  employedAlumni: number
+  continuingStudies: number
+  seekingEmployment: number
+  employmentRate: number
+  placementBreakdown: BreakdownRow[]
+  placementSectors: BreakdownRow[]
+  placementContracts: BreakdownRow[]
+  programKpis: ProgramKpi[]
+}
 
-const DROPOUT_REASONS = [
-  { reason: 'Réorientation',      pct: 34 },
-  { reason: 'Difficultés financières', pct: 22 },
-  { reason: 'Échec académique',   pct: 19 },
-  { reason: 'Raisons personnelles', pct: 15 },
-  { reason: 'Transfert vers autre université', pct: 10 },
-]
+function money(value: number) {
+  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(value)
+}
 
-const NATIONALITY_BREAKDOWN = [
-  { label: 'Française',         count: 856, pct: 69 },
-  { label: 'Européenne (UE)',   count: 248, pct: 20 },
-  { label: 'Internationale',    count: 143, pct: 11 },
-]
+function pct(value: number) {
+  return `${Number(value || 0).toFixed(1)}%`
+}
 
-const FINANCIAL_SUMMARY = [
-  { label: 'Droits d\'inscription 2025-26', value: '1 872 500 €', color: 'text-emerald-600' },
-  { label: 'Bourses & réductions',          value: '−148 200 €',  color: 'text-rose-600' },
-  { label: 'Impayés en cours',              value: '23 400 €',    color: 'text-amber-600' },
-  { label: 'Net encaissé',                  value: '1 700 900 €', color: 'text-indigo-600' },
-  { label: 'Budget missions (2025-26)',      value: '84 600 €',    color: 'text-slate-600' },
-  { label: 'Masse salariale enseignants',   value: '3 240 000 €', color: 'text-slate-600' },
-]
-
-const TEACHER_STATS = [
-  { label: 'Enseignants permanents',    value: 38 },
-  { label: 'Contractuels',              value: 6  },
-  { label: 'Vacataires',                value: 4  },
-  { label: 'Professeurs invités',       value: 2  },
-  { label: 'H. supp. cumulées (S2)',    value: '186h' },
-  { label: 'Missions approuvées',       value: 12 },
-]
-
-// ─── Bar spark ────────────────────────────────────────────────────────────────
-function Sparkbar({ value, max, color }: { value: number; max: number; color: string }) {
-  const pct = Math.min((value / max) * 100, 100)
+function Sparkbar({ value, max = 100, color = 'bg-rose-600' }: { value: number; max?: number; color?: string }) {
+  const width = Math.min(100, max > 0 ? (value / max) * 100 : 0)
   return (
     <div className="flex items-center gap-2">
-      <div className="flex-1 h-2 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
-        <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
+      <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
+        <div className={`h-full rounded-full ${color}`} style={{ width: `${width}%` }} />
       </div>
-      <span className="text-xs font-semibold w-8 text-right">{value}%</span>
+      <span className="w-12 text-right text-xs font-semibold">{pct(value)}</span>
     </div>
   )
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
-export function AdminReports() {
-  const [section, setSection] = useState<ReportSection>('students')
-  const [exporting, setExporting] = useState(false)
-  const [exported, setExported]   = useState(false)
-
-  function handleExport() {
-    setExporting(true)
-    setTimeout(() => { setExporting(false); setExported(true); setTimeout(() => setExported(false), 3000) }, 1500)
-  }
-
-  const tabs: { key: ReportSection; label: string; icon: string }[] = [
-    { key: 'students',  label: 'Effectifs étudiants', icon: '👥' },
-    { key: 'results',   label: 'Résultats académiques', icon: '📊' },
-    { key: 'finance',   label: 'Données financières',  icon: '💰' },
-    { key: 'teachers',  label: 'Données enseignants',  icon: '🎓' },
-  ]
-
+function KpiCard({ label, value, tone }: { label: string; value: string | number; tone?: 'good' | 'warn' | 'info' }) {
+  const color = tone === 'good' ? 'text-emerald-600' : tone === 'warn' ? 'text-amber-600' : tone === 'info' ? 'text-indigo-600' : 'text-rose-600'
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Reporting Ministère</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Tableaux de bord statistiques — Année universitaire 2025-2026</p>
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={handleExport}
-            disabled={exporting}
-            className="rounded-lg border border-rose-300 px-4 py-2 text-sm font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-60"
-          >
-            {exporting ? '⏳ Export…' : exported ? '✓ Exporté' : '📥 Exporter XLSX'}
-          </button>
-          <button className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700">
-            📄 Rapport PDF Ministère
-          </button>
-        </div>
-      </div>
+    <div className="rounded-xl border bg-card p-4 shadow-sm">
+      <p className={`text-2xl font-bold ${color}`}>{value}</p>
+      <p className="mt-0.5 text-xs text-muted-foreground">{label}</p>
+    </div>
+  )
+}
 
-      {/* Summary KPIs */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {[
-          { label: 'Étudiants inscrits',  value: '1 247',   color: 'text-indigo-600' },
-          { label: 'Taux de réussite moy.', value: '79%',   color: 'text-emerald-600' },
-          { label: 'Taux d\'abandon',     value: '6.2%',    color: 'text-rose-600' },
-          { label: 'Taux d\'encadr.',     value: '1 / 26',  color: 'text-amber-600' },
-        ].map(k => (
-          <div key={k.label} className="rounded-xl border bg-card p-4 shadow-sm">
-            <p className={`text-2xl font-bold ${k.color}`}>{k.value}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">{k.label}</p>
+function Breakdown({ title, rows, color }: { title: string; rows: BreakdownRow[]; color: string }) {
+  return (
+    <div className="rounded-xl border bg-card p-5">
+      <h3 className="mb-3 font-semibold">{title}</h3>
+      <div className="space-y-3">
+        {rows.length === 0 ? <p className="text-sm text-muted-foreground">Aucune donnee.</p> : null}
+        {rows.map(row => (
+          <div key={row.label}>
+            <div className="mb-1 flex justify-between gap-3 text-sm">
+              <span>{row.label}</span>
+              <span className="font-semibold">{row.count} ({pct(row.pct)})</span>
+            </div>
+            <Sparkbar value={row.pct} color={color} />
           </div>
         ))}
       </div>
+    </div>
+  )
+}
 
-      {/* Tabs */}
-      <div className="flex gap-1 border-b">
-        {tabs.map(t => (
+export function AdminReports() {
+  const [section, setSection] = useState<ReportSection>('students')
+  const [exporting, setExporting] = useState(false)
+  const { data, isLoading, isError } = useOverviewReport()
+  const report = data as OverviewReport | null
+
+  async function handleExport() {
+    setExporting(true)
+    try {
+      await downloadStudentsCsv()
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  const tabs: { key: ReportSection; label: string }[] = [
+    { key: 'students', label: 'Effectifs' },
+    { key: 'results', label: 'Resultats' },
+    { key: 'finance', label: 'Finance' },
+    { key: 'graduation', label: 'Laurea' },
+    { key: 'placement', label: 'Placement' },
+  ]
+
+  if (isLoading) {
+    return <div className="h-64 animate-pulse rounded-xl bg-muted" />
+  }
+
+  if (isError || !report) {
+    return <p className="text-sm text-destructive">Impossible de charger les rapports.</p>
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Reporting decisionnel</h1>
+          <p className="mt-0.5 text-sm text-muted-foreground">Synthese academique, finance et diplomation.</p>
+        </div>
+        <button
+          onClick={handleExport}
+          disabled={exporting}
+          className="rounded-lg border border-rose-300 px-4 py-2 text-sm font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-60"
+        >
+          {exporting ? 'Export...' : 'Exporter etudiants CSV'}
+        </button>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <KpiCard label="Etudiants actifs" value={report.activeStudents} tone="info" />
+        <KpiCard label="Taux reussite moyen" value={pct(report.avgPassRate)} tone="good" />
+        <KpiCard label="Taux abandon" value={pct(report.abandonRate)} tone="warn" />
+        <KpiCard label="Encadrement" value={report.encadrementRatio} />
+      </div>
+
+      <div className="flex gap-1 overflow-x-auto border-b">
+        {tabs.map(tab => (
           <button
-            key={t.key}
-            onClick={() => setSection(t.key)}
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-              section === t.key ? 'border-rose-600 text-rose-600' : 'border-transparent text-muted-foreground hover:text-foreground'
+            key={tab.key}
+            onClick={() => setSection(tab.key)}
+            className={`border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+              section === tab.key ? 'border-rose-600 text-rose-600' : 'border-transparent text-muted-foreground hover:text-foreground'
             }`}
           >
-            {t.icon} {t.label}
+            {tab.label}
           </button>
         ))}
       </div>
 
-      {/* Sections */}
-      {section === 'students' && (
+      {section === 'students' ? (
         <div className="space-y-4">
-          {/* Enrollment trend */}
           <div className="rounded-xl border bg-card p-5">
-            <h3 className="font-semibold mb-4">Évolution des effectifs</h3>
-            <div className="flex items-end gap-4 h-32">
-              {ENROLLMENT_TREND.map(t => {
-                const pct = ((t.count - 1000) / 400) * 100
+            <h3 className="mb-4 font-semibold">Evolution des inscriptions</h3>
+            <div className="flex h-36 items-end gap-4">
+              {report.enrollmentTrend.map(row => {
+                const max = Math.max(...report.enrollmentTrend.map(item => item.count), 1)
+                const height = Math.max(12, (row.count / max) * 100)
                 return (
-                  <div key={t.year} className="flex-1 flex flex-col items-center gap-1">
-                    <span className="text-xs font-bold text-indigo-600">{t.count.toLocaleString('fr-FR')}</span>
-                    <div className="w-full rounded-t-lg bg-indigo-500" style={{ height: `${pct}%`, minHeight: '20%' }} />
-                    <span className="text-[10px] text-muted-foreground">{t.year}</span>
+                  <div key={row.year} className="flex flex-1 flex-col items-center gap-1">
+                    <span className="text-xs font-bold text-indigo-600">{row.count.toLocaleString('fr-FR')}</span>
+                    <div className="w-full rounded-t-lg bg-indigo-500" style={{ height: `${height}%` }} />
+                    <span className="text-[10px] text-muted-foreground">{row.year}</span>
                   </div>
                 )
               })}
             </div>
           </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            {/* Nationality */}
-            <div className="rounded-xl border bg-card p-5">
-              <h3 className="font-semibold mb-3">Nationalités</h3>
-              <div className="space-y-3">
-                {NATIONALITY_BREAKDOWN.map(n => (
-                  <div key={n.label}>
-                    <div className="flex justify-between text-sm mb-1">
-                      <span>{n.label}</span>
-                      <span className="font-semibold">{n.count} ({n.pct}%)</span>
-                    </div>
-                    <Sparkbar value={n.pct} max={100} color="bg-indigo-500" />
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Dropout reasons */}
-            <div className="rounded-xl border bg-card p-5">
-              <h3 className="font-semibold mb-3">Causes d'abandon</h3>
-              <div className="space-y-3">
-                {DROPOUT_REASONS.map(d => (
-                  <div key={d.reason}>
-                    <div className="flex justify-between text-sm mb-1">
-                      <span>{d.reason}</span>
-                      <span className="font-semibold">{d.pct}%</span>
-                    </div>
-                    <Sparkbar value={d.pct} max={40} color="bg-rose-400" />
-                  </div>
-                ))}
-              </div>
-            </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Breakdown title="Statuts etudiants" rows={report.studentStatusBreakdown} color="bg-indigo-500" />
+            <Breakdown title="Nationalites" rows={report.nationalities} color="bg-rose-500" />
           </div>
         </div>
-      )}
+      ) : null}
 
-      {section === 'results' && (
+      {section === 'results' ? (
         <div className="space-y-4">
-          <div className="rounded-xl border bg-card overflow-hidden">
-            <div className="border-b px-5 py-3 bg-slate-50 dark:bg-slate-800">
-              <h3 className="font-semibold text-sm">Taux de réussite par programme (S1 vs S2)</h3>
-            </div>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <KpiCard label="Moyenne GPA" value={report.avgGpa} tone="info" />
+            <KpiCard label="Moyenne notes" value={report.avgGrade} tone="good" />
+            <KpiCard label="Presence examens" value={pct(report.examPresenceRate)} tone="warn" />
+            <KpiCard label="Diplomes emis" value={report.diplomasIssued} />
+          </div>
+          <div className="overflow-hidden rounded-xl border bg-card">
             <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b">
-                  <th className="px-5 py-2 text-left text-xs font-semibold text-muted-foreground">Programme</th>
-                  <th className="px-5 py-2 text-center text-xs font-semibold text-muted-foreground">S1</th>
-                  <th className="px-5 py-2 text-center text-xs font-semibold text-muted-foreground">S2</th>
-                  <th className="px-5 py-2 text-center text-xs font-semibold text-muted-foreground">Évolution</th>
+              <thead className="border-b bg-muted/40 text-left text-xs uppercase text-muted-foreground">
+                <tr>
+                  <th className="px-4 py-3">Programme</th>
+                  <th className="px-4 py-3">Etudiants</th>
+                  <th className="px-4 py-3">Reussite</th>
+                  <th className="px-4 py-3">Retention</th>
+                  <th className="px-4 py-3">A risque</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {PASS_RATES.map(r => (
-                  <tr key={r.program} className="hover:bg-muted/30">
-                    <td className="px-5 py-3">{r.program}</td>
-                    <td className="px-5 py-3 text-center">
-                      <div className="flex flex-col items-center gap-1">
-                        <span className="font-semibold">{r.s1}%</span>
-                        <Sparkbar value={r.s1} max={100} color="bg-blue-400" />
-                      </div>
+                {report.programKpis.map((row, index) => (
+                  <tr key={`${row.degree_programs?.code ?? 'program'}-${index}`}>
+                    <td className="px-4 py-3">
+                      <p className="font-medium">{row.degree_programs?.name ?? 'Programme'}</p>
+                      <p className="text-xs text-muted-foreground">{row.degree_programs?.code ?? '-'}</p>
                     </td>
-                    <td className="px-5 py-3 text-center">
-                      <div className="flex flex-col items-center gap-1">
-                        <span className="font-semibold">{r.s2}%</span>
-                        <Sparkbar value={r.s2} max={100} color="bg-indigo-500" />
-                      </div>
-                    </td>
-                    <td className={`px-5 py-3 text-center font-bold ${r.delta < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
-                      {r.delta > 0 ? '+' : ''}{r.delta}%
-                    </td>
+                    <td className="px-4 py-3">{row.total_students ?? 0}</td>
+                    <td className="px-4 py-3">{pct(Number(row.pass_rate ?? 0))}</td>
+                    <td className="px-4 py-3">{pct(Number(row.retention_rate ?? 0))}</td>
+                    <td className="px-4 py-3">{row.at_risk_count ?? 0}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-
-          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-            📊 <strong>Tendance :</strong> Légère baisse des taux de réussite du S1 au S2 — cohérente avec la difficulté croissante des modules. Aucun programme en dessous du seuil ministériel de 65%.
-          </div>
         </div>
-      )}
+      ) : null}
 
-      {section === 'finance' && (
+      {section === 'finance' ? (
         <div className="space-y-4">
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {FINANCIAL_SUMMARY.map(f => (
-              <div key={f.label} className="rounded-xl border bg-card p-4 shadow-sm">
-                <p className={`text-xl font-bold ${f.color}`}>{f.value}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">{f.label}</p>
-              </div>
-            ))}
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <KpiCard label="Encaisse" value={money(report.totalRevenue)} tone="good" />
+            <KpiCard label="Reste du" value={money(report.outstandingFees)} tone="warn" />
+            <KpiCard label="Taux recouvrement" value={pct(report.paymentCollectionRate)} tone="info" />
+            <KpiCard label="Enseignants" value={report.teacherCount} />
           </div>
-          <div className="rounded-xl border bg-card p-5">
-            <h3 className="font-semibold mb-3 text-sm">Répartition des droits d'inscription par programme</h3>
-            <div className="space-y-3">
-              {[
-                { label: 'Master',   pct: 58, amount: '1 085 650 €' },
-                { label: 'Licence',  pct: 32, amount: '599 200 €' },
-                { label: 'Doctorat', pct: 10, amount: '187 650 €' },
-              ].map(r => (
-                <div key={r.label}>
-                  <div className="flex justify-between text-sm mb-1">
-                    <span>{r.label}</span>
-                    <span className="text-muted-foreground">{r.amount} ({r.pct}%)</span>
-                  </div>
-                  <Sparkbar value={r.pct} max={100} color="bg-emerald-500" />
-                </div>
-              ))}
-            </div>
-          </div>
+          <Breakdown title="Statut des frais" rows={report.feeBreakdown} color="bg-emerald-500" />
         </div>
-      )}
+      ) : null}
 
-      {section === 'teachers' && (
+      {section === 'graduation' ? (
         <div className="space-y-4">
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {TEACHER_STATS.map(s => (
-              <div key={s.label} className="rounded-xl border bg-card p-4 shadow-sm">
-                <p className="text-2xl font-bold text-rose-600">{s.value}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">{s.label}</p>
-              </div>
-            ))}
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <KpiCard label="Candidats prets" value={report.graduationReady} tone="good" />
+            <KpiCard label="Diplomes emis" value={report.diplomasIssued} tone="info" />
+            <KpiCard label="Diplomes totaux" value={report.graduated} />
+            <KpiCard label="Abandons" value={report.withdrawn} tone="warn" />
           </div>
-          <div className="rounded-xl border bg-card p-5">
-            <h3 className="font-semibold mb-3 text-sm">Répartition par département</h3>
-            <div className="space-y-3">
-              {[
-                { label: 'Informatique',       count: 18, pct: 37 },
-                { label: 'Mathématiques',      count: 12, pct: 25 },
-                { label: 'Sciences des Données', count: 10, pct: 21 },
-                { label: 'Droit',              count: 8,  pct: 17 },
-              ].map(d => (
-                <div key={d.label}>
-                  <div className="flex justify-between text-sm mb-1">
-                    <span>{d.label}</span>
-                    <span className="font-semibold">{d.count} enseignants ({d.pct}%)</span>
-                  </div>
-                  <Sparkbar value={d.pct} max={50} color="bg-violet-500" />
-                </div>
-              ))}
-            </div>
+          <Breakdown title="Demandes de Laurea par statut" rows={report.graduationBreakdown} color="bg-violet-500" />
+        </div>
+      ) : null}
+
+      {section === 'placement' ? (
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <KpiCard label="Reponses placement" value={report.placementSurveyCount ?? 0} tone="info" />
+            <KpiCard label="Taux emploi" value={pct(report.employmentRate ?? 0)} tone="good" />
+            <KpiCard label="En emploi" value={report.employedAlumni ?? 0} tone="good" />
+            <KpiCard label="En recherche" value={report.seekingEmployment ?? 0} tone="warn" />
+          </div>
+          <div className="grid gap-4 lg:grid-cols-3">
+            <Breakdown title="Situation alumni" rows={report.placementBreakdown ?? []} color="bg-emerald-500" />
+            <Breakdown title="Secteurs" rows={report.placementSectors ?? []} color="bg-indigo-500" />
+            <Breakdown title="Contrats" rows={report.placementContracts ?? []} color="bg-rose-500" />
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   )
 }

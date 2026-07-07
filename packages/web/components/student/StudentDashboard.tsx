@@ -50,7 +50,7 @@ const ANNOUNCEMENTS = [
 interface SectionProps {
   title:        string
   subtitle?:    string
-  badge?:       string
+  badge?:       string | undefined
   badgeRed?:    boolean
   children:     React.ReactNode
   defaultOpen?: boolean

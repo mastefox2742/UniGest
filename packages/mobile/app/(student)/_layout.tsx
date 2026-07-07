@@ -89,7 +89,19 @@ export default function StudentLayout() {
         options={{ href: null }}
       />
       <Tabs.Screen
+        name="internships"
+        options={{ href: null }}
+      />
+      <Tabs.Screen
+        name="alumni"
+        options={{ href: null }}
+      />
+      <Tabs.Screen
         name="courses"
+        options={{ href: null }}
+      />
+      <Tabs.Screen
+        name="course-detail"
         options={{ href: null }}
       />
       <Tabs.Screen

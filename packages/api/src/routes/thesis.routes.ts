@@ -1,6 +1,8 @@
 import { Router } from 'express'
 import { authMiddleware, type AuthenticatedRequest } from '../middleware/auth.middleware'
 import { requireRole } from '../middleware/rbac.middleware'
+import { SubmitThesisSchema, UpdateThesisStatusSchema, validate, validateParams } from '../middleware/validate'
+import { auditLog } from '../middleware/mfa.middleware'
 import {
   getStudentThesis,
   submitThesis,
@@ -36,6 +38,8 @@ thesisRouter.get('/me',
 thesisRouter.post('/',
   authMiddleware,
   requireRole('student'),
+  auditLog('THESIS_SUBMIT'),
+  validate(SubmitThesisSchema),
   async (req: AuthenticatedRequest, res) => {
     try {
       const { title, abstract, documentUrl, advisorName, coAdvisorName } = req.body as {
@@ -95,6 +99,9 @@ thesisRouter.get('/',
 thesisRouter.patch('/:id/status',
   authMiddleware,
   requireRole('admin', 'secretary'),
+  auditLog('THESIS_STATUS_UPDATE'),
+  validateParams('id'),
+  validate(UpdateThesisStatusSchema),
   async (req, res) => {
     try {
       const { status, notes, defenseDate } = req.body as {

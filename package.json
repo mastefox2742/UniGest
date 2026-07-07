@@ -13,6 +13,8 @@
     "build": "turbo run build",
     "test": "turbo run test",
     "lint": "turbo run lint",
+    "verify:demo": "npm --workspace @unigest/api test && npm --workspace @unigest/api run build && npm --workspace @unigest/web run type-check && npm --workspace @unigest/mobile run type-check",
+    "verify:release": "npm run verify:demo && npm run build",
     "format": "prettier --write \"packages/**/*.{ts,tsx,js,json,css,md}\"",
     "db:types": "supabase gen types typescript --local > packages/shared/src/types/supabase.ts",
     "db:push": "supabase db push",

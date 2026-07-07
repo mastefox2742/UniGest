@@ -6,7 +6,7 @@ import { useStudentElearningCourse, useUpsertProgress, useSubmitAssignment } fro
 import { useForumPosts, useCreateForumPost } from '@/lib/hooks/useForum'
 import { QuizPlayer } from './QuizPlayer'
 
-type Tab = 'content' | 'assignments' | 'quizzes' | 'forum'
+type Tab = 'content' | 'assignments' | 'quizzes' | 'forum' | 'announcements'
 
 function MaterialViewer({
   material,
@@ -350,6 +350,7 @@ export function CoursePlayer({ ecId }: { ecId: string }) {
     { id: 'content',     label: '📚 Contenu' },
     { id: 'assignments', label: '📝 Devoirs' },
     { id: 'quizzes',     label: '🧠 Quiz' },
+    { id: 'announcements', label: 'Annonces' },
     { id: 'forum',       label: '💬 Forum' },
   ]
 
@@ -459,6 +460,35 @@ export function CoursePlayer({ ecId }: { ecId: string }) {
             ))}
           {((ec.elearning_quizzes as any[]) ?? []).filter((q: any) => q.is_published).length === 0 && (
             <p className="text-center text-sm text-muted-foreground py-8">Aucun quiz disponible.</p>
+          )}
+        </div>
+      )}
+
+      {activeTab === 'announcements' && (
+        <div className="space-y-3">
+          {((ec.elearning_announcements as any[]) ?? [])
+            .sort((a: any, b: any) => {
+              if (a.is_pinned !== b.is_pinned) return a.is_pinned ? -1 : 1
+              return new Date(b.published_at ?? b.created_at).getTime() - new Date(a.published_at ?? a.created_at).getTime()
+            })
+            .map((announcement: any) => (
+              <article key={announcement.id} className="rounded-xl border bg-card p-4">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <h3 className="font-semibold">{announcement.title}</h3>
+                  {announcement.is_pinned ? (
+                    <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700">
+                      Epinglee
+                    </span>
+                  ) : null}
+                </div>
+                <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">{announcement.body}</p>
+                <p className="mt-3 text-xs text-muted-foreground">
+                  {new Date(announcement.published_at ?? announcement.created_at).toLocaleDateString('fr-FR')}
+                </p>
+              </article>
+            ))}
+          {((ec.elearning_announcements as any[]) ?? []).length === 0 && (
+            <p className="text-center text-sm text-muted-foreground py-8">Aucune annonce pour ce cours.</p>
           )}
         </div>
       )}

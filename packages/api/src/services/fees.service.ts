@@ -1,4 +1,11 @@
 import { createClient } from '@supabase/supabase-js'
+import {
+  assertFeeCanBePaid,
+  assertPaymentAmountMatches,
+  calculateLateFee,
+  calculateOutstandingAmount,
+} from './fee-rules'
+import { createScenarioNotificationForStudent } from './notifications.service'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -6,25 +13,20 @@ const supabase = createClient(
 )
 
 export interface CreateFeeInput {
-  studentId:       string
-  academicYearId:  string
-  amount:          number
-  dueDate:         string  // YYYY-MM-DD
-  description?:    string
+  studentId: string
+  academicYearId: string
+  amount: number
+  dueDate: string
+  description?: string
 }
 
 export interface PayFeeInput {
-  feeId:        string
-  paymentRef:   string
-  method:       string   // 'bank_transfer' | 'card' | 'cash' | etc.
-  amount:       number
+  feeId: string
+  paymentRef: string
+  method: string
+  amount: number
 }
 
-// ─── Lecture ──────────────────────────────────────────────────────────────────
-
-/**
- * Frais d'un étudiant (depuis son user_id Supabase Auth)
- */
 export async function getStudentFees(studentUserId: string) {
   const { data: student } = await supabase
     .from('students')
@@ -34,7 +36,6 @@ export async function getStudentFees(studentUserId: string) {
 
   if (!student) return []
 
-  // Mettre à jour les frais en retard avant de renvoyer
   await markOverdueFees(student.id)
 
   const { data, error } = await supabase
@@ -50,19 +51,16 @@ export async function getStudentFees(studentUserId: string) {
   return data ?? []
 }
 
-/**
- * Résumé financier rapide (totaux par statut)
- */
 export async function getStudentFeesSummary(studentUserId: string) {
   const fees = await getStudentFees(studentUserId)
 
   const pending = fees
     .filter(f => f.status === 'pending')
-    .reduce((sum, f) => sum + Number(f.amount) + Number(f.late_fee ?? 0), 0)
+    .reduce((sum, f) => sum + calculateOutstandingAmount({ amount: Number(f.amount), late_fee: Number(f.late_fee ?? 0) }), 0)
 
   const overdue = fees
     .filter(f => f.status === 'overdue')
-    .reduce((sum, f) => sum + Number(f.amount) + Number(f.late_fee ?? 0), 0)
+    .reduce((sum, f) => sum + calculateOutstandingAmount({ amount: Number(f.amount), late_fee: Number(f.late_fee ?? 0) }), 0)
 
   const paid = fees
     .filter(f => f.status === 'paid')
@@ -71,9 +69,6 @@ export async function getStudentFeesSummary(studentUserId: string) {
   return { fees, pending, overdue, paid, total: pending + overdue }
 }
 
-/**
- * Tous les frais (admin/secrétaire) avec filtres
- */
 export async function getAllFees(filters: {
   status?: string
   academicYearId?: string
@@ -90,7 +85,7 @@ export async function getAllFees(filters: {
     `)
     .order('due_date', { ascending: false })
 
-  if (filters.status)         query = query.eq('status', filters.status)
+  if (filters.status) query = query.eq('status', filters.status)
   if (filters.academicYearId) query = query.eq('academic_year_id', filters.academicYearId)
 
   const { data, error } = await query
@@ -98,45 +93,75 @@ export async function getAllFees(filters: {
   return data ?? []
 }
 
-// ─── Mutations (secrétaire / admin) ──────────────────────────────────────────
-
-/**
- * Marquer un frais comme payé + enregistrer le paiement
- */
 export async function markFeePaid(input: PayFeeInput) {
+  await markFeeOverdueIfNeeded(input.feeId)
+
   const { data: fee } = await supabase
     .from('tuition_fees')
-    .select('id, student_id, amount, status')
+    .select('id, student_id, amount, status, late_fee')
     .eq('id', input.feeId)
     .single()
 
   if (!fee) throw new Error('Frais introuvable')
-  if (fee.status === 'paid') throw new Error('Ce frais est déjà payé')
-  if (fee.status === 'waived') throw new Error('Ce frais a été exonéré')
+
+  const normalizedFee = {
+    amount: Number(fee.amount),
+    late_fee: Number(fee.late_fee ?? 0),
+    status: fee.status,
+  }
+
+  assertFeeCanBePaid(normalizedFee)
+  assertPaymentAmountMatches(normalizedFee, input.amount)
 
   const now = new Date().toISOString()
+  const amount = calculateOutstandingAmount(normalizedFee)
 
-  // Mettre à jour le frais
-  await supabase.from('tuition_fees').update({
-    status:      'paid',
-    paid_at:     now,
+  const { error: updateError } = await supabase.from('tuition_fees').update({
+    status: 'paid',
+    paid_at: now,
     payment_ref: input.paymentRef,
   }).eq('id', input.feeId)
+  if (updateError) throw new Error(updateError.message)
 
-  // Enregistrer le paiement
-  await supabase.from('payments').insert({
+  const { error: paymentError } = await supabase.from('payments').insert({
     student_id: fee.student_id,
-    fee_id:     input.feeId,
-    amount:     input.amount,
-    method:     input.method,
-    reference:  input.paymentRef,
-    paid_at:    now,
+    fee_id: input.feeId,
+    amount,
+    method: input.method,
+    reference: input.paymentRef,
+    paid_at: now,
   })
+  if (paymentError) throw new Error(paymentError.message)
+
+  await createScenarioNotificationForStudent(fee.student_id, {
+    topic: 'fee',
+    event: 'paid',
+    message: `Votre paiement de ${amount.toFixed(2)} EUR a ete enregistre.`,
+    link: '/student/fees',
+  }).catch(err => console.error('[notifications] fee paid:', err.message))
 }
 
-/**
- * Exonérer un frais (dispense totale)
- */
+export async function payStudentFee(studentUserId: string, input: PayFeeInput) {
+  const { data: student } = await supabase
+    .from('students')
+    .select('id')
+    .eq('user_id', studentUserId)
+    .single()
+
+  if (!student) throw new Error('Etudiant introuvable')
+
+  const { data: fee } = await supabase
+    .from('tuition_fees')
+    .select('id')
+    .eq('id', input.feeId)
+    .eq('student_id', student.id)
+    .single()
+
+  if (!fee) throw new Error('Frais introuvable pour cet etudiant')
+
+  await markFeePaid(input)
+}
+
 export async function waiveFee(feeId: string, reason?: string) {
   const { data: fee } = await supabase
     .from('tuition_fees')
@@ -145,43 +170,47 @@ export async function waiveFee(feeId: string, reason?: string) {
     .single()
 
   if (!fee) throw new Error('Frais introuvable')
-  if (fee.status === 'paid') throw new Error('Ce frais est déjà payé')
+  if (fee.status === 'paid') throw new Error('Ce frais est deja paye')
 
-  await supabase.from('tuition_fees').update({
-    status:      'waived',
-    payment_ref: reason ?? 'Exonération',
+  const { error } = await supabase.from('tuition_fees').update({
+    status: 'waived',
+    payment_ref: reason ?? 'Exoneration',
   }).eq('id', feeId)
+
+  if (error) throw new Error(error.message)
 }
 
-/**
- * Créer un nouveau frais de scolarité pour un étudiant
- */
 export async function createFee(input: CreateFeeInput) {
   const { data, error } = await supabase
     .from('tuition_fees')
     .insert({
-      student_id:       input.studentId,
+      student_id: input.studentId,
       academic_year_id: input.academicYearId,
-      amount:           input.amount,
-      due_date:         input.dueDate,
-      status:           'pending',
+      amount: input.amount,
+      due_date: input.dueDate,
+      status: 'pending',
     })
     .select()
     .single()
 
-  if (error || !data) throw new Error('Impossible de créer le frais')
+  if (error || !data) throw new Error(error?.message ?? 'Impossible de creer le frais')
+
+  await createScenarioNotificationForStudent(input.studentId, {
+    topic: 'fee',
+    event: 'created',
+    message: `Un nouveau frais de ${Number(input.amount).toFixed(2)} EUR est disponible. Echeance: ${input.dueDate}.`,
+    link: '/student/fees',
+  }).catch(err => console.error('[notifications] fee created:', err.message))
+
   return data
 }
 
-/**
- * Passer les frais dépassés en 'overdue' + appliquer pénalité de retard (5%)
- */
 async function markOverdueFees(studentId: string) {
-  const today = new Date().toISOString().split('T')[0]
+  const today = new Date().toISOString().slice(0, 10)
 
   const { data: overdueItems } = await supabase
     .from('tuition_fees')
-    .select('id, amount, late_fee')
+    .select('id, amount')
     .eq('student_id', studentId)
     .eq('status', 'pending')
     .lt('due_date', today)
@@ -189,10 +218,30 @@ async function markOverdueFees(studentId: string) {
   if (!overdueItems || overdueItems.length === 0) return
 
   for (const fee of overdueItems) {
-    const lateFee = Math.round(Number(fee.amount) * 0.05 * 100) / 100 // 5%
+    const lateFee = calculateLateFee(Number(fee.amount))
     await supabase.from('tuition_fees').update({
-      status:   'overdue',
+      status: 'overdue',
       late_fee: lateFee,
     }).eq('id', fee.id)
   }
+}
+
+async function markFeeOverdueIfNeeded(feeId: string) {
+  const today = new Date().toISOString().slice(0, 10)
+
+  const { data: fee } = await supabase
+    .from('tuition_fees')
+    .select('id, amount, due_date, status')
+    .eq('id', feeId)
+    .single()
+
+  if (!fee || fee.status !== 'pending' || fee.due_date >= today) return
+
+  const lateFee = calculateLateFee(Number(fee.amount))
+  const { error } = await supabase
+    .from('tuition_fees')
+    .update({ status: 'overdue', late_fee: lateFee })
+    .eq('id', feeId)
+
+  if (error) throw new Error(error.message)
 }

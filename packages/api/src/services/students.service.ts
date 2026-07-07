@@ -1,4 +1,11 @@
 import { createClient } from '@supabase/supabase-js'
+import {
+  arithmeticMean,
+  cfuEarned,
+  cfuProgress,
+  laureaStartScore,
+  weightedMean,
+} from './career-rules'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -22,6 +29,10 @@ export interface DashboardData {
 }
 
 export interface LibrettoEntry {
+  matricola?:     string
+  studentName?:   string
+  degreeProgram?: string
+  degreeType?:    string
   id:            string
   courseCode:    string
   courseName:    string
@@ -33,6 +44,30 @@ export interface LibrettoEntry {
   publishedAt:   string | null
   examDate:      string | null
   teacherName:   string
+}
+
+export interface StudentCareer {
+  student: {
+    id: string
+    matricola: string | null
+    fullName: string
+    status: string
+    currentYear: number
+    enrollmentYear: number
+    degreeProgram: string
+    degreeType: string
+    totalCfu: number
+  }
+  summary: {
+    passedExams: number
+    totalCfuEarned: number
+    totalCfu: number
+    cfuProgressPct: number
+    arithmeticMean: number
+    weightedMean: number
+    laureaStartScore: number
+  }
+  libretto: LibrettoEntry[]
 }
 
 export async function getStudentDashboard(userId: string): Promise<DashboardData | null> {
@@ -97,6 +132,10 @@ export async function getStudentGrades(
   if (error || !data) return []
 
   return (data as Record<string, unknown>[]).map((r) => ({
+    matricola:     r.matricola as string,
+    studentName:   r.student_name as string,
+    degreeProgram: r.degree_program as string,
+    degreeType:    r.degree_type as string,
     id:          r.id as string,
     courseCode:  r.course_code as string,
     courseName:  r.course_name as string,
@@ -109,4 +148,52 @@ export async function getStudentGrades(
     examDate:    r.exam_date as string | null,
     teacherName: r.teacher_name as string,
   }))
+}
+
+export async function getStudentCareer(
+  userId: string,
+  filters: { semester?: number; courseYear?: number } = {},
+): Promise<StudentCareer | null> {
+  const { data: student, error } = await supabase
+    .from('students')
+    .select(`
+      id, matricola, status, current_year, enrollment_year,
+      profiles!user_id(first_name, last_name),
+      degree_programs!degree_program_id(name, type, total_cfu)
+    `)
+    .eq('user_id', userId)
+    .single()
+
+  if (error || !student) return null
+
+  const profile = student.profiles as any
+  const program = student.degree_programs as any
+  const libretto = await getStudentGrades(userId, filters)
+  const earned = cfuEarned(libretto)
+  const weighted = weightedMean(libretto)
+  const totalCfu = Number(program?.total_cfu ?? 0)
+
+  return {
+    student: {
+      id:             student.id as string,
+      matricola:      student.matricola as string | null,
+      fullName:       [profile?.first_name, profile?.last_name].filter(Boolean).join(' '),
+      status:         student.status as string,
+      currentYear:    student.current_year as number,
+      enrollmentYear: student.enrollment_year as number,
+      degreeProgram:  program?.name ?? '',
+      degreeType:     program?.type ?? '',
+      totalCfu,
+    },
+    summary: {
+      passedExams:       libretto.length,
+      totalCfuEarned:    earned,
+      totalCfu,
+      cfuProgressPct:    cfuProgress(earned, totalCfu),
+      arithmeticMean:    arithmeticMean(libretto),
+      weightedMean:      weighted,
+      laureaStartScore:  laureaStartScore(weighted),
+    },
+    libretto,
+  }
 }

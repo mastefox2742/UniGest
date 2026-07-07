@@ -38,6 +38,28 @@ export function useSubmitThesis() {
   })
 }
 
+export function useStudentGraduationApplication() {
+  return useQuery({
+    queryKey: ['graduation-me'],
+    queryFn:  () => apiFetch('/api/graduation/me'),
+  })
+}
+
+export function useSubmitGraduationApplication() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: { thesisTitle?: string }) => {
+      const payload: { thesisTitle?: string } = {}
+      if (body.thesisTitle) payload.thesisTitle = body.thesisTitle
+      return apiFetch('/api/graduation/apply', { method: 'POST', body: JSON.stringify(payload) })
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['graduation-me'] })
+      qc.invalidateQueries({ queryKey: ['student-dashboard'] })
+    },
+  })
+}
+
 // Admin
 export function useAllTheses(status?: string) {
   return useQuery({

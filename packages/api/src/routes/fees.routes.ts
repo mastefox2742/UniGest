@@ -1,12 +1,14 @@
 import { Router } from 'express'
 import { authMiddleware, type AuthenticatedRequest } from '../middleware/auth.middleware'
 import { requireRole } from '../middleware/rbac.middleware'
-import { validate, CreateFeeSchema, PayFeeSchema, WaiveFeeSchema } from '../middleware/validate'
+import { validate, validateParams, CreateFeeSchema, PayFeeSchema, WaiveFeeSchema } from '../middleware/validate'
+import { auditLog } from '../middleware/mfa.middleware'
 import {
   getStudentFees,
   getStudentFeesSummary,
   getAllFees,
   markFeePaid,
+  payStudentFee,
   waiveFee,
   createFee,
 } from '../services/fees.service'
@@ -28,6 +30,31 @@ feesRouter.get('/me',
       return res.json({ data: summary })
     } catch (err) {
       return res.status(500).json({ error: (err as Error).message })
+    }
+  },
+)
+
+/**
+ * POST /api/fees/:id/self-pay
+ * Paiement en libre-service de l'etudiant connecte
+ */
+feesRouter.post('/:id/self-pay',
+  authMiddleware,
+  requireRole('student'),
+  auditLog('FEE_SELF_PAY'),
+  validateParams('id'),
+  validate(PayFeeSchema),
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const { paymentRef, method, amount } = req.body as {
+        paymentRef: string
+        method:     string
+        amount:     number
+      }
+      await payStudentFee(req.user!.id, { feeId: req.params.id!, paymentRef, method, amount })
+      return res.json({ data: { message: 'Paiement enregistre' } })
+    } catch (err) {
+      return res.status(400).json({ error: (err as Error).message })
     }
   },
 )
@@ -65,6 +92,7 @@ feesRouter.get('/',
 feesRouter.post('/',
   authMiddleware,
   requireRole('admin', 'secretary'),
+  auditLog('FEE_CREATE'),
   validate(CreateFeeSchema),
   async (req, res) => {
     try {
@@ -86,6 +114,8 @@ feesRouter.post('/',
 feesRouter.post('/:id/pay',
   authMiddleware,
   requireRole('admin', 'secretary'),
+  auditLog('FEE_MARK_PAID'),
+  validateParams('id'),
   validate(PayFeeSchema),
   async (req, res) => {
     try {
@@ -112,6 +142,9 @@ feesRouter.post('/:id/pay',
 feesRouter.post('/:id/waive',
   authMiddleware,
   requireRole('admin', 'secretary'),
+  auditLog('FEE_WAIVE'),
+  validateParams('id'),
+  validate(WaiveFeeSchema),
   async (req, res) => {
     try {
       const { reason } = req.body as { reason?: string }

@@ -14,7 +14,7 @@ export interface LibrettoEntry {
   cfu:           number
   courseYear:    number
   semester:      number
-  grade:         string      // "30L", "28", etc.
+  grade:         string
   gradeStatus:   string
   publishedAt:   string | null
   examDate:      string | null
@@ -26,54 +26,71 @@ export interface LibrettoFilters {
   courseYear?: number
 }
 
-async function fetchLibretto(filters: LibrettoFilters): Promise<LibrettoEntry[]> {
+export interface StudentCareerResponse {
+  student: {
+    id: string
+    matricola: string | null
+    fullName: string
+    status: string
+    currentYear: number
+    enrollmentYear: number
+    degreeProgram: string
+    degreeType: string
+    totalCfu: number
+  }
+  summary: {
+    passedExams: number
+    totalCfuEarned: number
+    totalCfu: number
+    cfuProgressPct: number
+    arithmeticMean: number
+    weightedMean: number
+    laureaStartScore: number
+  }
+  libretto: LibrettoEntry[]
+}
+
+async function getToken() {
   const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return []
+  const { data: { session } } = await supabase.auth.getSession()
+  return session?.access_token ?? null
+}
 
-  // Récupérer le student_id
-  const { data: student } = await supabase
-    .from('students')
-    .select('id, matricola')
-    .eq('user_id', user.id)
-    .single()
+async function fetchCareer(filters: LibrettoFilters): Promise<StudentCareerResponse | null> {
+  const token = await getToken()
+  if (!token) return null
 
-  if (!student) return []
+  const params = new URLSearchParams()
+  if (filters.semester) params.set('semester', String(filters.semester))
+  if (filters.courseYear) params.set('courseYear', String(filters.courseYear))
 
-  let query = supabase
-    .from('libretto')
-    .select('*')
-    .eq('matricola', student.matricola)
+  const query = params.toString()
+  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/students/me/career${query ? `?${query}` : ''}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
 
-  if (filters.semester)   query = query.eq('semester', filters.semester)
-  if (filters.courseYear) query = query.eq('course_year', filters.courseYear)
+  if (!res.ok) return null
+  const json = await res.json()
+  return json.data ?? null
+}
 
-  const { data, error } = await query.order('exam_date', { ascending: false })
-  if (error || !data) return []
-
-  return (data as Record<string, unknown>[]).map((r) => ({
-    id:            r.id as string,
-    matricola:     r.matricola as string,
-    studentName:   r.student_name as string,
-    degreeProgram: r.degree_program as string,
-    degreeType:    r.degree_type as string,
-    courseCode:    r.course_code as string,
-    courseName:    r.course_name as string,
-    cfu:           r.cfu as number,
-    courseYear:    r.course_year as number,
-    semester:      r.semester as number,
-    grade:         r.grade as string,
-    gradeStatus:   r.grade_status as string,
-    publishedAt:   r.published_at as string | null,
-    examDate:      r.exam_date as string | null,
-    teacherName:   r.teacher_name as string,
-  }))
+async function fetchLibretto(filters: LibrettoFilters): Promise<LibrettoEntry[]> {
+  const career = await fetchCareer(filters)
+  return career?.libretto ?? []
 }
 
 export function useLibretto(filters: LibrettoFilters = {}) {
   return useQuery({
     queryKey: ['student', 'libretto', filters],
     queryFn:  () => fetchLibretto(filters),
+    staleTime: 5 * 60 * 1000,
+  })
+}
+
+export function useStudentCareer(filters: LibrettoFilters = {}) {
+  return useQuery({
+    queryKey: ['student', 'career', filters],
+    queryFn:  () => fetchCareer(filters),
     staleTime: 5 * 60 * 1000,
   })
 }
